@@ -2,7 +2,7 @@
 
 A scroll-through presentation on the Deep Underground Neutrino Experiment (DUNE), made for an A-Level Physics group presentation (Group 4).
 
-Live site: https://chucknuris228.github.io/dune/
+Live site: https://chucknuris228.github.io/DUNE/
 
 Controls: scroll, or use the arrow keys / space bar to move between scenes. Press **N** to show speaker notes.
 
