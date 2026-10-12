@@ -1,0 +1,1362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Neutrinos Through the Earth</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,800&family=JetBrains+Mono:wght@400;500;700;800&family=Outfit:wght@200;300;400;700&display=swap">
+<style>
+/* Layout: one fixed WebGL stage behind full-screen scroll scenes; persistent chrome (centred wordmark, AUDIO toggle);
+   five scene layouts copied from the reference: hero, scene + bottom-left title, HUD-framed panel, spec sheet, word/frame/word; closing card.
+   Single committed dark look, as in the reference. */
+:root{
+  --black:#000000;
+  --white:#FFFFFF;
+  --grey:#9A9A9A;
+  --soft:#C9CCD2;
+  --gold:#E8C27A;      /* reference light-cone gold: electrons, antineutrinos, depth */
+  --blue:#5FA8FF;      /* atmosphere blue: neutrinos, muons */
+  --violet:#A98BFF;    /* argon scintillation */
+  --font-logo:"Outfit", "Futura", Arial, sans-serif;
+  --font-thin:"Outfit", "Helvetica Neue", Arial, sans-serif;
+  --font-heavy:"Archivo", "Arial Black", Arial, sans-serif;
+  --font-mono:"JetBrains Mono", "Courier New", monospace;
+  color-scheme:dark;
+}
+html{scroll-snap-type:y proximity;background:var(--black)}
+body{background:var(--black);color:var(--white);font-family:var(--font-thin);margin:0;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+:focus-visible{outline:1px solid var(--white);outline-offset:4px}
+a{color:inherit}
+
+#gl{position:fixed;inset:0;width:100vw;height:100vh;display:block;z-index:0}
+#vignette{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 45%, rgba(0,0,0,.55) 100%)}
+main{position:relative;z-index:2}
+
+/* ---------- chrome ---------- */
+.chrome{position:fixed;left:0;right:0;top:0;z-index:5;display:flex;justify-content:center;align-items:center;padding:calc(env(safe-area-inset-top,0px) + 30px) 16px 0;pointer-events:none}
+.logo{font-family:var(--font-logo);font-weight:400;font-size:clamp(20px,2.15vw,32px);letter-spacing:.32em;padding-left:.32em;line-height:1;display:flex;user-select:none}
+.logo span{transition:opacity .08s}
+.logo span.off{opacity:0}
+.audio{position:fixed;top:calc(env(safe-area-inset-top,0px) + 32px);right:clamp(16px,4.2vw,62px);z-index:6;display:flex;align-items:center;gap:10px;background:none;border:0;cursor:pointer;font-family:var(--font-thin);font-weight:400;font-size:13px;letter-spacing:.14em;padding:6px 0}
+.bars{display:flex;align-items:center;gap:3px;height:12px}
+.bars i{display:block;width:2px;height:4px;background:var(--white)}
+.audio[aria-pressed="true"] .bars i{animation:eq .9s ease-in-out infinite}
+.audio[aria-pressed="true"] .bars i:nth-child(2){animation-delay:.2s}
+.audio[aria-pressed="true"] .bars i:nth-child(3){animation-delay:.45s}
+.audio[aria-pressed="true"] .bars i:nth-child(4){animation-delay:.1s}
+@keyframes eq{0%,100%{height:3px}50%{height:12px}}
+
+/* ---------- loader ---------- */
+#loader{position:fixed;inset:0;z-index:20;background:var(--black);display:grid;place-items:center;transition:opacity .9s ease;cursor:pointer}
+#loader.done{opacity:0;pointer-events:none}
+#loader .wrap{position:relative;overflow:hidden;padding:30px 60px}
+#loader .logo{font-size:clamp(30px,3.4vw,52px);justify-content:center}
+#loader .streak{position:absolute;top:50%;left:-60%;width:60%;height:3px;transform:translateY(-50%);background:linear-gradient(90deg,transparent,rgba(160,200,255,.0) 10%,rgba(200,225,255,.9) 70%,#fff 80%,transparent);filter:blur(1.5px);animation:streak 1.6s .35s cubic-bezier(.6,0,.2,1) forwards}
+#loader .glow{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%, rgba(140,180,255,.35), transparent 60%);opacity:0;animation:glow 1.6s .35s ease forwards}
+@keyframes streak{to{left:110%}}
+@keyframes glow{40%{opacity:1}100%{opacity:0}}
+
+/* ---------- scenes ---------- */
+.scene{position:relative;box-sizing:border-box;height:100vh;min-height:640px;scroll-snap-align:start;overflow:hidden}
+.mono{font-family:var(--font-mono);font-weight:500;text-transform:uppercase;letter-spacing:.06em;font-size:clamp(11px,.92vw,14px);line-height:1.6;text-shadow:0 1px 8px rgba(0,0,0,.9)}
+.grey{color:var(--soft)}
+.cursor::after{content:"_";animation:blink 1s steps(1) infinite;margin-left:2px}
+@keyframes blink{50%{opacity:0}}
+.heavy{font-family:var(--font-heavy);font-weight:800;font-stretch:112%;text-transform:uppercase;line-height:.9;letter-spacing:-.005em;font-size:clamp(40px,4.9vw,76px);margin:0;text-shadow:0 2px 24px rgba(0,0,0,.55)}
+.heavy span{display:block;white-space:nowrap}
+.tasktag{font-family:var(--font-mono);font-weight:700;font-size:11px;letter-spacing:.16em;color:var(--gold)}
+.plus{display:inline-block;width:20px;height:20px;position:relative;flex:none}
+.plus::before,.plus::after{content:"";position:absolute;background:var(--white);opacity:.85}
+.plus::before{left:0;right:0;top:50%;height:1px}
+.plus::after{top:0;bottom:0;left:50%;width:1px}
+
+/* hero */
+.l-hero{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:0;padding:0 16px}
+.hero-title{font-family:var(--font-thin);font-weight:200;font-size:clamp(40px,6.5vw,104px);line-height:1.02;letter-spacing:.005em;margin:0;text-transform:uppercase}
+.hero-title .line{display:block;white-space:nowrap}
+.hero-title .ch{display:inline-block;transition:transform 1.6s cubic-bezier(.16,1,.3,1),opacity 1.4s ease,filter 1.4s ease}
+.hero-title .ch.scatter{opacity:0;filter:blur(6px)}
+.hero-sub{font-family:var(--font-thin);font-weight:300;text-transform:uppercase;letter-spacing:.16em;font-size:clamp(11px,1.05vw,16px);color:var(--soft);margin:3.4vh 0 4.4vh;max-width:80ch}
+.initiate{position:relative;background:var(--white);color:var(--black);border:0;font-family:var(--font-mono);font-weight:700;font-size:12px;letter-spacing:.16em;padding:19px 48px;cursor:pointer;transition:background .3s,color .3s}
+.initiate::before,.initiate::after{content:"";position:absolute;inset:-7px;pointer-events:none;
+  background:
+   linear-gradient(var(--white),var(--white)) left top/3px 3px no-repeat,
+   linear-gradient(var(--white),var(--white)) right top/3px 3px no-repeat,
+   linear-gradient(var(--white),var(--white)) left bottom/3px 3px no-repeat,
+   linear-gradient(var(--white),var(--white)) right bottom/3px 3px no-repeat;transition:inset .3s}
+.initiate:hover{background:transparent;color:var(--white);box-shadow:inset 0 0 0 1px var(--white)}
+.initiate:hover::before{inset:-12px}
+.phones{margin-top:12vh;display:flex;flex-direction:column;align-items:center;gap:22px;font-family:var(--font-thin);font-weight:300;font-size:13px;letter-spacing:.18em;color:var(--soft)}
+.phones svg{width:40px;height:40px}
+
+/* scene + bottom-left title */
+.l-title .block{position:absolute;left:clamp(16px,15.5vw,240px);bottom:22vh;display:grid;gap:22px;max-width:min(640px,84vw)}
+.l-title .row{display:flex;gap:12px;align-items:flex-start}
+.scrollcue{position:absolute;left:50%;top:38vh;transform:translateX(-50%);font-family:var(--font-mono);font-weight:700;font-size:13px;letter-spacing:.14em;white-space:nowrap}
+.counter{font-family:var(--font-mono);font-weight:800;font-size:clamp(26px,2.6vw,40px);letter-spacing:-.01em;font-variant-numeric:tabular-nums;text-shadow:0 2px 18px rgba(0,0,0,.8)}
+
+/* HUD frame panel */
+.l-hud{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:13vh 16px 6vh}
+.hud-head{width:min(1050px,74vw);display:flex;align-items:center;gap:22px;margin-bottom:2.2vh}
+.hud-head .plus{width:30px;height:30px}
+.hud-head .heavy{font-size:clamp(32px,3.6vw,56px)}
+.frame{position:relative;width:min(1050px,74vw);height:min(52vh,520px)}
+.frame>svg.fr{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.frame .content{position:absolute;inset:22px 34px;display:flex;align-items:center;justify-content:center}
+.frame .content>svg{width:100%;height:100%}
+.frame.solid .fill{position:absolute;inset:0;clip-path:polygon(52px 0,calc(100% - 52px) 0,100% 32px,100% calc(100% - 32px),calc(100% - 52px) 100%,52px 100%,0 calc(100% - 32px),0 32px);background:rgba(2,5,12,.62);backdrop-filter:blur(3px)}
+.hud-cap{width:min(1050px,74vw);display:flex;justify-content:flex-end;margin-top:2.4vh}
+.hud-cap p{max-width:62ch;text-align:right;margin:0}
+.sq{position:absolute;right:0;top:-10px;display:flex;gap:4px}
+.sq i{display:block;width:10px;height:10px;border:1px solid var(--white)}
+.sq i:first-child{background:var(--white)}
+.d .ln{stroke:var(--white);fill:none;stroke-width:1.5;vector-effect:non-scaling-stroke}
+.d text{font-family:var(--font-mono);font-weight:500;fill:var(--white);letter-spacing:.06em}
+.d .gr{fill:var(--grey)} .d .bl{fill:var(--blue)} .d .gd{fill:var(--gold)}
+
+/* spec sheet */
+.l-spec .name{position:absolute;left:52%;top:23vh;display:grid;gap:6px}
+.l-spec .tiny{font-family:var(--font-mono);font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:none;color:var(--white)}
+.l-spec .big{font-family:var(--font-mono);font-weight:800;font-size:clamp(64px,7.6vw,118px);line-height:.9;letter-spacing:-.02em;text-shadow:0 4px 30px rgba(0,0,0,.6);white-space:nowrap}
+.l-spec .dialrow{position:absolute;left:clamp(16px,17.5vw,260px);bottom:16vh;display:flex;gap:18px;align-items:flex-start}
+.dial{position:relative;width:118px;height:150px;flex:none}
+.dial svg{width:118px;height:118px;animation:spin 18s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.dial .lbl{position:absolute;bottom:0;left:-6px;right:-6px;display:flex;justify-content:space-between;font-family:var(--font-mono);font-weight:500;font-size:11px}
+.l-spec .note{display:grid;gap:4px;padding-top:4px;max-width:46ch}
+.l-spec .side{position:absolute;right:clamp(16px,8vw,130px);bottom:16vh;max-width:40ch;text-align:right}
+.mini{display:grid;grid-template-columns:repeat(3,auto);gap:4px 18px;font-family:var(--font-mono);font-weight:700;font-size:15px;margin-top:10px;width:max-content}
+.mini .nu{color:var(--blue)}
+.range{display:grid;gap:8px;margin-top:10px;width:min(340px,70vw)}
+.range label{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;letter-spacing:.1em}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:20px;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:1px;background:var(--white)}
+input[type=range]::-moz-range-track{height:1px;background:var(--white)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-7px;background:var(--black);border:1px solid var(--white);transform:rotate(45deg)}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;background:var(--black);border:1px solid var(--white);border-radius:0;transform:rotate(45deg)}
+.legendline{position:absolute;left:50%;bottom:7vh;transform:translateX(-50%);white-space:nowrap}
+
+/* word / frame / word */
+.l-sandwich{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.2vh;padding:12vh 16px 4vh}
+.l-sandwich .heavy{font-size:clamp(30px,3.3vw,52px);text-align:center}
+.l-sandwich .frame{width:min(860px,64vw);height:min(46vh,440px)}
+.edge{position:absolute;font-family:var(--font-mono);font-weight:700;font-size:11px;letter-spacing:.1em;white-space:nowrap;text-shadow:0 1px 6px #000}
+.edge.l{left:10px;top:50%;transform:translateY(-50%) rotate(-90deg);transform-origin:left center;left:18px;top:62%}
+.edge.r{right:18px;top:38%;transform:rotate(90deg);transform-origin:right center}
+.edge.t{top:12px;left:50%;transform:translateX(-50%)}
+.edge.b{bottom:12px;left:50%;transform:translateX(-50%)}
+
+/* CP toggles */
+.toggles{display:flex;flex-wrap:wrap;gap:16px;margin-top:4px}
+.tog{position:relative;background:transparent;border:0;box-shadow:inset 0 0 0 1px rgba(255,255,255,.55);font-family:var(--font-mono);font-weight:700;font-size:11px;letter-spacing:.14em;padding:13px 20px;cursor:pointer}
+.tog[aria-pressed="true"]{background:var(--white);color:var(--black)}
+.tog::before{content:"";position:absolute;inset:-6px;pointer-events:none;background:
+   linear-gradient(var(--white),var(--white)) left top/3px 3px no-repeat,
+   linear-gradient(var(--white),var(--white)) right top/3px 3px no-repeat,
+   linear-gradient(var(--white),var(--white)) left bottom/3px 3px no-repeat,
+   linear-gradient(var(--white),var(--white)) right bottom/3px 3px no-repeat;opacity:0;transition:opacity .2s}
+.tog[aria-pressed="true"]::before,.tog:hover::before{opacity:1}
+.verdict{font-family:var(--font-heavy);font-weight:800;font-stretch:112%;text-transform:uppercase;font-size:clamp(16px,1.4vw,22px);min-height:2.4em;max-width:30ch;line-height:1.15}
+
+/* hyper-k columns */
+.cols{width:min(1050px,74vw);display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:2.4vh}
+.cols p{margin:0}
+
+/* closing */
+.l-close{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 16px;background:var(--black)}
+.l-close .mark{width:120px;height:120px;margin-bottom:22px}
+.l-close .logo{font-weight:700;font-size:clamp(22px,1.9vw,30px);letter-spacing:.3em;justify-content:center;margin-bottom:9vh}
+.closing{font-family:var(--font-thin);font-weight:300;font-size:clamp(28px,3.1vw,48px);letter-spacing:-.01em;margin:0}
+.closing b{font-weight:700}
+.contact{font-family:var(--font-thin);font-weight:400;font-size:clamp(16px,1.6vw,24px);letter-spacing:.1em;margin-top:9vh;text-decoration:none}
+.contact:hover{opacity:.75}
+.status{margin-top:18px;color:var(--grey)}
+.replay{margin-top:11vh;background:none;border:0;cursor:pointer;font-family:var(--font-mono);font-weight:500;font-size:13px;letter-spacing:.2em;display:grid;justify-items:center;gap:20px}
+.replay::after{content:"";width:66px;height:3px;background:var(--white);transition:width .3s}
+.replay:hover::after{width:110px}
+
+/* photo frames, slideshows, full-bleed photos */
+.photos{position:absolute;inset:0;clip-path:polygon(52px 0,calc(100% - 52px) 0,100% 32px,100% calc(100% - 32px),calc(100% - 52px) 100%,52px 100%,0 calc(100% - 32px),0 32px);overflow:hidden;background:#05070c}
+.photos img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transform:scale(1.07);transition:opacity 1.1s ease,transform 9s ease}
+.photos img.on{opacity:1;transform:scale(1)}
+.photos img.contain{object-fit:contain;box-sizing:border-box;padding:18px 46px}
+.frame[data-slides]{cursor:pointer}
+.sqs{position:absolute;right:0;top:-20px;display:flex;gap:5px;z-index:2}
+.sqs button{width:10px;height:10px;border:1px solid var(--white);background:transparent;padding:0;cursor:pointer}
+.sqs button[aria-current="true"]{background:var(--white)}
+.bg{position:absolute;inset:0;overflow:hidden}
+.bg img{width:100%;height:100%;object-fit:cover;animation:kb 26s ease-in-out infinite alternate}
+@keyframes kb{from{transform:scale(1.02)}to{transform:scale(1.14) translate(-1.5%,-1%)}}
+.shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.78) 0%,rgba(0,0,0,.2) 55%,rgba(0,0,0,.5) 100%),linear-gradient(0deg,rgba(0,0,0,.7),transparent 50%),linear-gradient(180deg,rgba(0,0,0,.6),transparent 22%)}
+.credit{position:absolute;left:clamp(16px,4.2vw,62px);bottom:22px;font-family:var(--font-mono);font-size:10px;color:var(--grey);letter-spacing:.12em;text-transform:uppercase;margin:0}
+.product{position:absolute;left:4vw;top:26vh;width:min(47vw,780px);filter:drop-shadow(0 30px 60px rgba(0,0,0,.7));animation:float 7s ease-in-out infinite alternate}
+@keyframes float{to{transform:translateY(-14px) rotate(-1deg)}}
+.l-product .dialrow{left:auto;right:clamp(16px,7vw,110px);bottom:14vh}
+.sideframe{position:absolute;right:clamp(16px,7vw,110px);top:22vh;width:min(30vw,470px);display:grid;gap:16px}
+.sideframe .frame{width:100%;height:min(36vh,330px)}
+.l-sandwich .frame.map{height:min(44vh,430px)}
+.l-sandwich .frame.map .photos{background:transparent}
+#sPip,#sNdlar,#s7,#sCollab{background:var(--black)}
+.l-spec .name{max-width:44vw}
+.l-spec .name .mono{white-space:normal}
+
+.src{position:absolute;right:clamp(16px,4.2vw,62px);bottom:22px;margin:0;font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;color:var(--grey);text-transform:uppercase;z-index:3;text-align:right;max-width:46vw}
+.src b{color:var(--white);font-weight:500}
+.refs{width:min(1100px,84vw);columns:2 380px;column-gap:48px;margin:0;padding:0;list-style:none}
+.refs li{break-inside:avoid;margin:0 0 12px;font-family:var(--font-mono);font-size:11.5px;line-height:1.55;letter-spacing:.02em;color:var(--soft);text-transform:none}
+.refs li b{color:var(--white);font-weight:700;margin-right:6px}
+.refs a{color:var(--white);text-decoration:underline;text-underline-offset:3px;word-break:break-all}
+#sRefs{background:var(--black)}
+#sRefs .hud-head{width:min(1100px,84vw)}
+
+/* speaker notes (presenter extension) */
+#notes{position:fixed;left:16px;right:16px;bottom:16px;z-index:8;max-width:760px;margin:0 auto;background:rgba(0,0,0,.86);border:1px solid rgba(255,255,255,.3);padding:16px 20px;font-family:var(--font-thin);font-size:16px;line-height:1.5;color:var(--soft)}
+#notes b{display:block;font-family:var(--font-mono);font-size:11px;letter-spacing:.14em;color:var(--white);margin-bottom:6px}
+
+/* no WebGL fallback */
+.nogl .scene{background:radial-gradient(ellipse at 70% 110%, #0B2A55 0%, #02060f 55%, #000 80%)}
+.nogl .scene.cav{background:radial-gradient(ellipse at 50% 30%, rgba(232,194,122,.35), #000 60%)}
+
+@media (max-width:820px){
+  .scene{height:auto;min-height:100svh}
+  .l-title .block{position:relative;left:auto;bottom:auto;padding:30vh 16px 14vh}
+  .scrollcue{top:18vh}
+  .l-hud,.l-sandwich{padding:96px 16px 56px}
+  .hud-head,.frame,.hud-cap,.cols{width:100%}
+  .frame{height:auto;aspect-ratio:1.5}
+  .l-sandwich .frame{width:100%;height:auto;aspect-ratio:1.6}
+  .frame .content{inset:14px 16px}
+  .hud-cap p{text-align:left}
+  .cols{grid-template-columns:1fr}
+  .l-spec{display:flex;flex-direction:column;gap:28px;padding:110px 16px 60px}
+  .l-spec .name,.l-spec .dialrow,.l-spec .side{position:static;text-align:left}
+  .l-spec .name{max-width:none}
+  .legendline{position:static;transform:none;white-space:normal;padding:0 16px 40px}
+  .edge.l,.edge.r{display:none}
+  .src{position:static;display:block;padding:0 16px 24px;max-width:none;text-align:left}
+  .product{position:relative;left:auto;top:auto;width:100%;order:2}
+  .sideframe{position:relative;right:auto;top:auto;width:100%}
+  .l-product .dialrow{position:static}
+  .heavy span{white-space:normal}
+  .hero-title .line{white-space:normal}
+}
+@media (prefers-reduced-motion:reduce){
+  .dial svg,.bars i,.bg img,.product{animation:none!important}
+  .hero-title .ch{transition:none}
+}
+</style>
+<style>html,body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+
+<canvas id="gl" aria-hidden="true"></canvas>
+<div id="vignette"></div>
+
+<div id="loader" role="presentation">
+  <div class="wrap"><div class="glow"></div><div class="logo">DUNE</div><div class="streak"></div></div>
+</div>
+
+<header class="chrome"><div class="logo" id="logo" aria-label="DUNE"><span>D</span><span>U</span><span>N</span><span>E</span></div></header>
+<button type="button" class="audio" id="audio" aria-pressed="false" aria-label="Toggle audio"><span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>AUDIO</button>
+
+<main>
+
+<!-- 0 HERO -->
+<section class="scene l-hero" id="s0" data-notes="Hold up your hand. In the second it took me to say that, several trillion neutrinos from the Sun went straight through it, and a few hundred trillion through your whole body. Almost none hit an atom. So here's a strange plan: the US is building an experiment that fires a beam of neutrinos 1,300 km through solid rock, from Illinois to a mine in South Dakota. No tunnel. Today we want to convince you it's the only way to answer some of the biggest open questions in physics.">
+  <h1 class="hero-title" id="heroTitle" aria-label="Neutrinos through the Earth"><span class="line">Neutrinos</span><span class="line">through the Earth</span></h1>
+  <p class="hero-sub">Firing the world's most intense neutrino beam 1,300 km through solid rock, from Illinois to South Dakota.</p>
+  <button type="button" class="initiate" id="initiate">INITIATE BEAM</button>
+  <div class="phones">
+    <svg viewBox="0 0 40 40" fill="none" stroke="#fff" stroke-width="1.2" aria-hidden="true"><path d="M6 24v-4a14 14 0 0 1 28 0v4"/><rect x="5" y="23" width="7" height="12" rx="3"/><rect x="28" y="23" width="7" height="12" rx="3"/></svg>
+    <span>EXPERIENCE WITH HEADPHONES</span>
+  </div>
+  <p class="src">SRC <b>[3]</b></p>
+</section>
+
+<!-- 1 HOOK -->
+<section class="scene l-title" id="s1" data-notes="Neutrinos interact only through the weak force, so the Sun's flux passes through us, and the whole planet, almost untouched. That's the puzzle of this talk: if they hardly ever interact, why would you fire a beam of them through 1,300 km of rock on purpose?">
+  <p class="scrollcue" id="scrollcue">SCROLL TO BEGIN ↓</p>
+  <div class="block">
+    <h2 class="heavy"><span data-glitch>Trillions</span><span data-glitch>per second</span></h2>
+    <div class="row"><span class="plus" aria-hidden="true"></span>
+      <div class="mono" style="display:grid;gap:10px">
+        <p style="margin:0" data-decode>Solar neutrinos through your body since this page opened:</p>
+        <p class="counter" id="count" style="margin:0">0</p>
+        <p style="margin:0" class="grey" data-decode>Almost none hit a single atom. So why fire a beam of them through 1,300 km of rock?</p>
+        <p style="margin:0;color:var(--white)" class="cursor">NASA ACRIMSAT · measured the Sun's output, 1999–2014</p>
+      </div>
+    </div>
+  </div>
+  <p class="src">SRC <b>[3] [6] [14]</b></p>
+</section>
+
+<!-- 2 LEPTONS : spec layout -->
+<section class="scene l-spec" id="s2" data-notes="Neutrinos are leptons, the cousins of the electron: three flavours, each tied to a charged partner, each with lepton number +1. No charge, so electromagnetism ignores them; no quarks, so the strong force ignores them. Only the weak force is left, carried by the W and Z bosons. In the original Standard Model they are massless, but we've seen them change flavour in flight, and that's only possible with mass. The first strong evidence came in 1998 from Super-Kamiokande, using neutrinos made when cosmic rays hit the upper atmosphere, the region NASA's AIM satellite on screen studies. That's a confirmed crack in the Standard Model, and DUNE is built to study it.">
+  <div class="name">
+    <span class="tiny">Muon neutrino · lepton · L = +1</span>
+    <span class="big">νμ</span>
+    <div class="mini" aria-label="Lepton families"><span>e⁻</span><span>μ⁻</span><span>τ⁻</span><span class="nu">νₑ</span><span class="nu">νμ</span><span class="nu">ντ</span></div>
+  </div>
+  <div class="dialrow">
+    <div class="dial" aria-hidden="true">
+      <svg viewBox="0 0 120 120"><path d="M60 4 A56 56 0 0 1 116 60" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M104 96 A56 56 0 0 1 22 101" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M8 78 A56 56 0 0 1 30 13" fill="none" stroke="#fff" stroke-width="1.2" opacity=".5"/></svg>
+      <div class="lbl"><span>W±</span><span>Z⁰</span></div>
+    </div>
+    <span class="plus" aria-hidden="true"></span>
+    <div class="note mono">
+      <p style="margin:0" data-decode>No charge · no quarks</p>
+      <p style="margin:0" class="cursor" data-decode>Weak force only</p>
+    </div>
+  </div>
+  <div class="side mono grey">
+    <p style="margin:0" data-decode>Original Standard Model: massless. Observed: they change flavour in flight, so they must have mass. First strong evidence: neutrinos made where cosmic rays hit the upper atmosphere (Super-Kamiokande, 1998).</p>
+    <p style="margin:10px 0 0;color:var(--white)" class="cursor">NASA AIM · studies the upper atmosphere</p>
+  </div>
+  <p class="src">SRC <b>[3] [14]</b></p>
+</section>
+
+<!-- MAP : HUD with official graphic -->
+<section class="scene l-hud" id="sMap" data-notes="Here's the official map. The beam starts at Fermilab in Batavia, Illinois, and ends at the Sanford Underground Research Facility in Lead, South Dakota. The exact baseline is 1,285 km, usually rounded to 1,300. Because the path is a straight chord through the curved Earth, its deepest point is about 32 km below the surface. No tunnel: the neutrinos simply go through the rock.">
+  <div class="hud-head"><span class="plus" aria-hidden="true"></span><h2 class="heavy"><span data-glitch>Fermilab_→_SURF</span></h2></div>
+  <div class="frame" data-frame data-slides data-cap="mapCap" aria-label="Fermilab to SURF images; click to advance">
+    <div class="photos">
+      <img class="contain" style="background:#d1e4f3" src="assets/map1300.jpg" alt="Official DUNE graphic: a straight 1,300 km path from Fermilab in Batavia, Illinois to the Sanford Underground Research Facility in Lead, South Dakota, dipping 32 km below the surface" data-cap="Exact baseline 1,285 km, rounded to 1,300. A straight chord through the curved Earth: deepest point ≈32 km down. No tunnel.">
+      <img class="contain" style="background:#ffffff" src="assets/route_blue.jpg" alt="Illustration: neutrinos leave Fermilab in Illinois, rise over a hill, then travel 800 miles (1,300 km) through the Earth to the Sanford Underground Research Facility in South Dakota" data-cap="Fermilab, Illinois → Sanford Lab, South Dakota: 800 miles / 1,300 km straight through the Earth.">
+      <img src="assets/fnal_aerial.jpg" alt="Aerial photo of Fermilab: the Main Injector ring in front and the larger former Tevatron ring behind, among fields" data-cap="The start: Fermilab, near Chicago. Front ring: the Main Injector, which gives protons their final 120 GeV.">
+      <img src="assets/wilson_hall.jpg" alt="Wilson Hall, Fermilab's tall concrete main building with two curved towers joined by glass" data-cap="Wilson Hall, Fermilab's headquarters. DUNE is hosted here.">
+    </div>
+    <div class="sqs" role="group" aria-label="Choose image"></div>
+  </div>
+  <div class="hud-cap"><p class="mono cursor" id="mapCap">Exact baseline 1,285 km, rounded to 1,300. A straight chord through the curved Earth: deepest point ≈32 km down. No tunnel.</p></div>
+  <p class="src">SRC <b>[1] [3] [8]</b></p>
+</section>
+
+<!-- PIP-II : product spec layout -->
+<section class="scene l-spec l-product" id="sPip" data-notes="The beam starts with protons. PIP-II is a new 215-metre superconducting linear accelerator at Fermilab that takes protons up to 800 MeV. The Booster then takes them to 8 GeV and the Main Injector to 120 GeV, giving a beam of more than a megawatt. The render shows a cryomodule: superconducting cavities inside a cold vessel, which do the accelerating.">
+  <div class="bg" style="opacity:.32"><img src="assets/pip2_front.jpg" alt=""></div><div class="shade"></div>
+  <img class="product" src="assets/pip2_cryo.png" alt="Cutaway render of a PIP-II superconducting cryomodule, a long red vessel holding accelerating cavities">
+  <div class="name">
+    <span class="tiny">Proton Improvement Plan II · superconducting linac · 215 m</span>
+    <span class="big">PIP-II</span>
+  </div>
+  <div class="dialrow">
+    <div class="dial" aria-hidden="true">
+      <svg viewBox="0 0 120 120"><path d="M60 4 A56 56 0 0 1 116 60" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M104 96 A56 56 0 0 1 22 101" fill="none" stroke="#fff" stroke-width="1.2"/></svg>
+      <div class="lbl"><span>0.8</span><span>120 GeV</span></div>
+    </div>
+    <span class="plus" aria-hidden="true"></span>
+    <div class="note mono">
+      <p style="margin:0" data-decode>Linac 0.8 GeV → Booster 8 GeV</p>
+      <p style="margin:0" data-decode>→ Main Injector 120 GeV</p>
+      <p style="margin:0" class="cursor" data-decode>Beam power &gt;1 MW, upgradeable to 2+ MW</p>
+    </div>
+  </div>
+  <p class="credit">Images: Fermilab · PIP-II cryomodule render and accelerator front end</p>
+  <p class="src">SRC <b>[6] [7]</b></p>
+</section>
+
+<!-- 3 BEAMLINE : HUD slideshow of real Fermilab/LBNF images -->
+<section class="scene l-hud" id="s3" data-notes="Protons from the Main Injector climb an 18-metre man-made embankment, then are aimed down at about 5.8 degrees towards South Dakota. They hit a graphite target and make pions and kaons. Two magnetic horns focus the positive ones forward; reverse the current and you focus negative ones, giving an antineutrino beam. The pions decay in a 194-metre pipe into muons and muon neutrinos. A pion at rest lives 26 ns, so would travel only 7.8 m on average, but at about 4 GeV its Lorentz factor is about 30, so time dilation stretches that to roughly 220 m. An absorber 221 m from the target stops everything except neutrinos, and the near detector hall sits 574 m from the target, about 60 m deep. Under construction: not yet running.">
+  <div class="hud-head"><span class="plus" aria-hidden="true"></span><h2 class="heavy"><span data-glitch>Beamline</span></h2><span class="tasktag">[ TASK 6(A) ]</span></div>
+  <div class="frame" data-frame data-slides data-cap="beamCap" aria-label="Beamline images; click to advance">
+    <div class="photos">
+      <img class="contain" style="background:#ffffff" src="assets/bl_recipe.jpg" alt="Fermilab graphic, Neutrino Beam Recipe: protons hit a target, making pions and kaons; a magnetic focusing horn focuses them into a decay pipe; muons and neutrinos emerge; a rock and beam absorber stops everything but neutrinos" data-cap="The recipe: protons → target → pions and kaons → horn focuses them → decay pipe → only neutrinos pass the absorber.">
+      <img class="contain" style="background:#ffffff" src="assets/bl_section.jpg" alt="LBNF beamline cross-section at Fermilab: protons extracted from the Main Injector climb a 60-foot embankment to the target hall, then descend through a 194 m decay pipe to the absorber hall; the near detector hall is 574 m from the target and about 205 ft deep" data-cap="The real LBNF layout: an 18 m hill, 194 m decay pipe, absorber at 221 m, near detector 574 m from the target and ~60 m deep.">
+      <img class="contain" style="background:#000000" src="assets/bl_horns.jpg" alt="Schematic: proton beam hits the target, then passes through Horn 1 and Horn 2, magnetic horns that focus pions and kaons, into a 200 m long decay pipe" data-cap="Target, then two magnetic horns. Flip the horn current and you get antineutrinos instead.">
+      <img src="assets/bl_hardware.jpg" alt="Close-up photo of Fermilab neutrino beamline hardware: a heavy metal assembly with a central circular opening, clamps and cooling pipes" data-cap="Real beamline hardware at Fermilab. The beam passes through the central opening.">
+    </div>
+    <div class="sqs" role="group" aria-label="Choose image"></div>
+  </div>
+  <div class="hud-cap"><p class="mono cursor" id="beamCap">The recipe: protons → target → pions and kaons → horn focuses them → decay pipe → only neutrinos pass the absorber.</p></div>
+  <p class="src">SRC <b>[7] [9] · LBNF beamline layout</b></p>
+</section>
+
+<!-- 4 OSCILLATION : spec layout -->
+<section class="scene l-spec" id="s4" data-notes="A muon neutrino is a quantum mixture of mass states that drift in and out of step, like two tuning forks making beats. The beat pattern is P = sin²(2θ) sin²(1.27 Δm² L / E), with Δm² in eV², L in km and E in GeV. The first maximum is where the bracket equals π/2. With Δm² ≈ 2.5 × 10⁻³ eV², L/E ≈ 495 km per GeV, so at 1,300 km, E ≈ 2.6 GeV: exactly what a proton accelerator beam naturally makes. Drag the slider: away from 2.6 GeV the far detector, the centre line, slides off the peak. Real analyses use three-flavour mixing plus matter effects.">
+  <div class="name">
+    <span class="tiny">Beam energy E · drag to tune</span>
+    <span class="big" id="Ebig">2.6 GeV</span>
+    <div class="range">
+      <label for="Eslider"><span>0.5 GEV</span><span>8 GEV</span></label>
+      <input type="range" id="Eslider" min="0.5" max="8" step="0.1" value="2.6">
+    </div>
+  </div>
+  <div class="dialrow">
+    <div class="dial" aria-hidden="true">
+      <svg viewBox="0 0 120 120"><path d="M60 4 A56 56 0 0 1 116 60" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M104 96 A56 56 0 0 1 22 101" fill="none" stroke="#fff" stroke-width="1.2"/></svg>
+      <div class="lbl"><span>L/E</span><span id="LEsmall">495</span></div>
+    </div>
+    <span class="plus" aria-hidden="true"></span>
+    <div class="note mono">
+      <p style="margin:0">P(νμ oscillates away) at 1,300 km = <b id="Pfar">100%</b></p>
+      <p style="margin:0" class="grey">P = sin²(2θ)·sin²(1.27·Δm²·L/E)</p>
+      <p style="margin:0" class="grey cursor">Δm² ≈ 2.5×10⁻³ eV² · L km · E GeV</p>
+    </div>
+  </div>
+  <div class="side mono grey"><p style="margin:0" data-decode>First maximum: 1.27·Δm²·L/E = π/2, so L/E ≈ 495 km/GeV. At 1,300 km: E ≈ 2.6 GeV.</p></div>
+  <p class="legendline mono grey">Blue: νμ survives · gold: νμ has oscillated away · white line: 1,300 km · track spans 0–2,600 km</p>
+  <p class="src">SRC <b>[4] [8] [14]</b></p>
+</section>
+
+<!-- 5 FEYNMAN : HUD -->
+<section class="scene l-hud" id="s5" data-notes="This is how you catch a neutrino, and it's the exchange diagram from the spec. The muon neutrino emits a W-plus and becomes a muon. The W-plus is absorbed by a down quark in a neutron, turning it into an up quark, so the neutron becomes a proton. Charge, baryon number and muon lepton number all balance. The neutrino is invisible, but this turns it into a charged particle that leaves a track. And the lepton that comes out tells you the flavour that went in.">
+  <div class="hud-head"><span class="plus" aria-hidden="true"></span><h2 class="heavy"><span data-glitch>Charged_current</span></h2></div>
+  <div class="frame solid" data-frame>
+    <div class="fill"></div>
+    <div class="content">
+      <svg class="d" viewBox="0 0 1000 420" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Feynman diagram, time upward: a muon neutrino becomes a muon by emitting a W-plus boson, which turns a down quark in a neutron into an up quark, making a proton. Conservation table: charge 0 to 0, baryon number 1 to 1, muon lepton number 1 to 1.">
+        <line x1="80" y1="370" x2="190" y2="210" stroke="#5FA8FF" stroke-width="4"/>
+        <line x1="190" y1="210" x2="80" y2="50" stroke="#5FA8FF" stroke-width="4"/>
+        <line x1="420" y1="370" x2="330" y2="210" stroke="#fff" stroke-width="4"/>
+        <line x1="330" y1="210" x2="420" y2="50" stroke="#fff" stroke-width="4"/>
+        <path d="M190 210 q8.75 -16 17.5 0 t17.5 0 t17.5 0 t17.5 0 t17.5 0 t17.5 0 t17.5 0 t17.5 0" fill="none" stroke="#E8C27A" stroke-width="3"/>
+        <circle cx="190" cy="210" r="6" fill="#fff"/><circle cx="330" cy="210" r="6" fill="#fff"/>
+        <text x="48" y="396" class="bl" font-size="22" font-weight="800">νμ</text>
+        <text x="48" y="40" class="bl" font-size="22" font-weight="800">μ⁻</text>
+        <text x="404" y="396" font-size="17">n (udd)</text>
+        <text x="404" y="40" font-size="17">p (uud)</text>
+        <text x="260" y="186" class="gd" font-size="20" font-weight="800" text-anchor="middle">W⁺</text>
+        <text x="350" y="258" class="gr" font-size="14">d → u</text>
+        <line x1="470" y1="360" x2="470" y2="70" stroke="#fff" stroke-width="1" opacity=".5"/>
+        <path d="M465 80 L470 66 L475 80 Z" fill="#fff" opacity=".5"/>
+        <text x="462" y="220" class="gr" font-size="12" text-anchor="end">TIME</text>
+        <text x="540" y="96" font-family="Archivo, Arial Black, sans-serif" font-size="40" font-weight="800" style="font-family:var(--font-heavy);letter-spacing:0">νμ + n → μ⁻ + p</text>
+        <g font-size="15">
+          <text x="540" y="160" class="gr">QUANTITY</text><text x="760" y="160" class="gr">BEFORE → AFTER</text>
+          <line x1="540" y1="172" x2="990" y2="172" stroke="#fff" opacity=".3"/>
+          <text x="540" y="204">CHARGE</text><text x="760" y="204">0 + 0 → −1 + 1</text>
+          <text x="540" y="240">BARYON NO.</text><text x="760" y="240">0 + 1 → 0 + 1</text>
+          <text x="540" y="276">MUON LEPTON NO.</text><text x="760" y="276">1 + 0 → 1 + 0</text>
+          <line x1="540" y1="292" x2="990" y2="292" stroke="#fff" opacity=".3"/>
+          <text x="540" y="328" class="gd">ALL CONSERVED · WEAK INTERACTION VIA W⁺</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+  <div class="hud-cap"><p class="mono cursor" data-decode>The outgoing lepton names the flavour: a μ⁻ means a νμ arrived; an e⁻ means a νₑ arrived.</p></div>
+  <p class="src">SRC <b>[14]</b></p>
+</section>
+
+<!-- 6 TPC : word / frame / word -->
+<section class="scene l-sandwich" id="s6" data-notes="Zoom into the argon. The muon is charged, so it knocks electrons off argon atoms all along its path: ionisation. A strong electric field does work on each electron, W = qV, and drifts the whole trail sideways to the anode readout at a steady speed. Where the charge lands gives two coordinates. The argon also flashes scintillation light the instant the particle passes, which starts the clock; drift time times drift speed gives the third coordinate. Together: a 3D picture of the interaction. The argon must be ultra-pure, or oxygen and water would capture the drifting electrons.">
+  <span class="tasktag">[ TASK 6(B) ]</span>
+  <h2 class="heavy"><span data-glitch>Ionisation</span></h2>
+  <div class="frame" data-frame>
+    <span class="edge t">SCINTILLATION LIGHT (127 NM) → START TIME t₀</span>
+    <span class="edge l">CATHODE (−)</span>
+    <span class="edge r" style="color:var(--blue)">ANODE READOUT (+)</span>
+    <span class="edge b">E-FIELD ← · e⁻ DRIFT → · W = qV</span>
+  </div>
+  <h2 class="heavy"><span data-glitch>Drift</span></h2>
+  <p class="mono grey cursor" style="margin:0;max-width:78ch;text-align:center" data-decode>Wires give 2 coordinates · drift time × drift speed gives the 3rd · 500 V/cm over 3.5 m: ~1.5 mm/µs, ~2.4 ms · cathode at −180 kV</p>
+  <p class="src">SRC <b>[5]</b></p>
+</section>
+
+<!-- PROTODUNE : HUD slideshow -->
+<section class="scene l-hud" id="sProto" data-notes="Before building 70,000 tonnes, you build prototypes. ProtoDUNE at CERN's Neutrino Platform: two cryostats, each holding about 800 tonnes of liquid argon, which recorded their first particle tracks in 2018. These photos are from inside before filling; the people show the scale. Everything inside has to be kept ultra-clean so the argon stays pure enough for electrons to drift metres.">
+  <div class="hud-head"><span class="plus" aria-hidden="true"></span><h2 class="heavy"><span data-glitch>ProtoDUNE_@_CERN</span></h2></div>
+  <div class="frame" data-frame data-slides data-cap="protoCap" aria-label="ProtoDUNE photo slideshow; click to advance">
+    <div class="photos">
+      <img src="assets/pd_inside1.jpg" alt="A person standing inside an empty ProtoDUNE cryostat lined with a gold-lit grid" data-cap="Inside a ProtoDUNE cryostat before filling. One person for scale.">
+      <img src="assets/pd_hall.jpg" alt="Wide view of the CERN Neutrino Platform hall with red steel cryostat frames" data-cap="CERN Neutrino Platform hall: ProtoDUNE cryostats in their red steel frames.">
+      <img src="assets/pd_top.jpg" alt="Workers on top of a ProtoDUNE cryostat" data-cap="On top of a cryostat. Each ProtoDUNE holds about 800 t of liquid argon.">
+      <img src="assets/pd_planes.jpg" alt="Technician on a lift beside tall detector structures inside a prototype cryostat" data-cap="Building the detector inside: tall structures, installed by lift.">
+      <img src="assets/pd_inside2.jpg" alt="Technicians in clean suits inside a gold-walled prototype detector" data-cap="Clean suits on: dust and moisture would spoil the argon purity.">
+      <img src="assets/pd_inside3.jpg" alt="Three technicians in white suits inside a gold-lit detector volume" data-cap="Prototypes proved the technology. First tracks: 2018.">
+    </div>
+    <div class="sqs" role="group" aria-label="Choose photo"></div>
+  </div>
+  <div class="hud-cap"><p class="mono cursor" id="protoCap">Inside a ProtoDUNE cryostat before filling. One person for scale.</p></div>
+  <p class="src">SRC <b>[1] [7]</b></p>
+</section>
+
+<!-- 7 UNDERGROUND : scene + bottom-left title -->
+<section class="scene l-title cav" id="s7" data-notes="This is a real DUNE cavern at the 4,850-foot level of the Sanford lab, about 1.5 km down; excavation finished in 2024. Why bury it? The sky rains cosmic-ray muons, about one per square centimetre per minute at the surface. Across a detector this size that's over a hundred thousand tracks a second, while we want a handful of neutrino events a day. Muons are charged, so they lose energy in rock and stop; a kilometre and a half cuts the rate by a factor of millions. Neutrinos don't care about the rock. This matters most for supernova neutrinos and proton decay, where there's no beam timing to reject muons.">
+  <div class="bg"><img src="assets/cavern.jpg" alt="A vast excavated DUNE cavern: rough rock walls, a smooth concrete floor and lights at the far end"></div><div class="shade"></div>
+  <div class="sideframe">
+    <div class="frame" data-frame data-slides data-cap="caveCap" aria-label="Cavern photos; click to advance">
+      <div class="photos" style="background:#fafdff">
+        <img class="contain" src="assets/excavation.jpg" alt="Diagram: rock from the cavern excavation at the 4850 level is lifted up the renovated Ross Shaft, about 1.5 km, and carried away by conveyor" data-cap="Rock went up the Ross Shaft, ~1.5 km, to the surface.">
+        <img src="assets/shaft.jpg" alt="Two miners smiling on a yellow work platform inside the rock shaft" data-cap="The crew who rebuilt the shaft.">
+      </div>
+      <div class="sqs" role="group" aria-label="Choose image"></div>
+    </div>
+    <p class="mono grey cursor" id="caveCap" style="margin:0">Rock went up the Ross Shaft, ~1.5 km, to the surface.</p>
+  </div>
+  <div class="block">
+    <h2 class="heavy"><span data-glitch>// 1.5_km_down</span></h2>
+    <div class="row"><span class="plus" aria-hidden="true"></span>
+      <p class="mono cursor" style="margin:0" data-decode>Cosmic-ray muons: ~1 per cm² per minute at the surface. 1.5 km of rock cuts that by a factor of millions. Neutrinos pass straight through.</p>
+    </div>
+  </div>
+  <p class="credit">A real DUNE cavern, 4,850-ft level, Sanford Lab · excavation completed 2024</p>
+  <p class="src">SRC <b>[6] [10] [11]</b></p>
+</section>
+
+<!-- 8 GOALS : spec layout -->
+<section class="scene l-spec cav" id="s8" data-notes="With the beam, DUNE measures oscillations precisely, tests for CP violation, and determines the mass ordering: is the third mass state the heaviest, normal ordering, or the lightest, inverted. Without the beam it watches for proton decay and supernova neutrinos. Rare events need a big target: four modules of 17,000 tonnes of liquid argon at about minus 184 degrees Celsius, minus 300 Fahrenheit. But only events in the inner fiducial volume, about 10,000 tonnes per module, count for precision physics: near the walls, events can be partly outside or come in from the rock. Phase I is two modules with a 1.2 MW beam; Phase II adds the rest and more beam power.">
+  <div class="name">
+    <span class="tiny">Far detector · liquid argon · −184 °C</span>
+    <span class="big">4×17 kt</span>
+    <span class="mono grey" style="margin-top:6px">Fiducial: 10 kt per module, 40 kt total · Phase I: 2 modules, 1.2 MW · Phase II: all 4, &gt;2 MW</span>
+  </div>
+  <div class="dialrow">
+    <div class="dial" aria-hidden="true">
+      <svg viewBox="0 0 120 120"><path d="M60 4 A56 56 0 0 1 116 60" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M104 96 A56 56 0 0 1 22 101" fill="none" stroke="#fff" stroke-width="1.2"/><circle cx="60" cy="60" r="30" fill="none" stroke="#5FA8FF" stroke-width="1" stroke-dasharray="4 4"/></svg>
+      <div class="lbl"><span>FID.</span><span>≈10 kt</span></div>
+    </div>
+    <span class="plus" aria-hidden="true"></span>
+    <div class="note mono">
+      <p style="margin:0" data-decode>Beam: oscillations · δ_CP · mass ordering</p>
+      <p style="margin:0" class="cursor" data-decode>No beam: proton decay · supernova neutrinos</p>
+    </div>
+  </div>
+  <div class="side mono grey"><p style="margin:0" data-decode>Gold box: total argon. Blue dashed box: fiducial volume. Only events inside it count for precision physics.</p></div>
+  <p class="src">SRC <b>[2] [4] [5] [12]</b></p>
+</section>
+
+<!-- FAR SITE : HUD slideshow -->
+<section class="scene l-hud" id="sFar" data-notes="Here's how the far site is laid out at the 4,850 level. Two long detector caverns, each holding two modules, with a central cavern for the cryogenics and facility systems, reached by the Ross Shaft, 1.5 km to the surface. The neutrinos arrive from Fermilab along the dashed lines. The render shows the steel support structure around one module, with people for scale.">
+  <div class="hud-head"><span class="plus" aria-hidden="true"></span><h2 class="heavy"><span data-glitch>Far_site</span></h2></div>
+  <div class="frame" data-frame data-slides data-cap="farCap" aria-label="Far site images; click to advance">
+    <div class="photos" style="background:#ffffff">
+      <img class="contain" src="assets/farsite.jpg" alt="LBNF South Dakota site cutaway: two detector caverns holding four detector modules, and a central utility cavern at the 4850 level, the Ross Shaft rising 1.5 km to the surface, and neutrinos arriving from Fermilab" data-cap="4850 level: two detector caverns, two modules each, plus a central cavern for cryogenics. Ross Shaft: 1.5 km to the surface.">
+      <img src="assets/fd_render.jpg" alt="Render of a far-detector module's green steel support structure, with tiny human figures for scale, beside blue cavern shapes" data-cap="Render: the steel structure around one module. Note the people for scale.">
+    </div>
+    <div class="sqs" role="group" aria-label="Choose image"></div>
+  </div>
+  <div class="hud-cap"><p class="mono cursor" id="farCap">4850 level: two detector caverns, two modules each, plus a central cavern for cryogenics. Ross Shaft: 1.5 km to the surface.</p></div>
+  <p class="src">SRC <b>[6] [7] [10]</b></p>
+</section>
+
+<!-- PATH TO SCIENCE : HUD timeline -->
+<section class="scene l-hud" id="sTime" data-notes="Here's where DUNE is today, from Fermilab's official fact sheet. Groundbreaking in 2017. The first ProtoDUNE came online at CERN in 2018. Site work at Fermilab began in 2019, and the main cavern excavation in South Dakota ran from 2021 to 2024. This year, 2026, construction of the detectors in the caverns begins. The plan is to start operating the first DUNE detector in 2029. So nothing on today's slides is a result yet: it's a machine being built.">
+  <div class="hud-head"><span class="plus" aria-hidden="true"></span><h2 class="heavy"><span data-glitch>Path_to_science</span></h2></div>
+  <div class="frame solid" data-frame>
+    <div class="fill"></div>
+    <div class="content"><svg class="d" viewBox="0 0 1000 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Timeline: 2017 groundbreaking; 2018 first ProtoDUNE online at CERN; 2019 site preparation at Fermilab; 2021 main cavern excavation begins; 2024 excavation complete; 2026 construction of the detectors underground begins; 2029 first DUNE detector begins operating"><line x1="98" y1="200" x2="680" y2="200" stroke="#ffffff" stroke-width="2"/><line x1="680" y1="200" x2="908" y2="200" stroke="#E8C27A" stroke-width="2" stroke-dasharray="8 6"/><path d="M908 194 L920 200 L908 206 Z" fill="#E8C27A"/><circle cx="140" cy="200" r="6" fill="#ffffff" stroke="#ffffff" stroke-width="2"/><line x1="140" y1="150" x2="140" y2="190" stroke="#ffffff" stroke-width="1.2" stroke-opacity=".7"/><text x="140" y="116" font-size="24" font-weight="800" text-anchor="middle" fill="#ffffff">2017</text><text x="140" y="140" font-size="12" text-anchor="middle" class="gr">GROUNDBREAKING</text><circle cx="200" cy="200" r="6" fill="#ffffff" stroke="#ffffff" stroke-width="2"/><line x1="200" y1="210" x2="200" y2="250" stroke="#ffffff" stroke-width="1.2" stroke-opacity=".7"/><text x="200" y="282" font-size="24" font-weight="800" text-anchor="middle" fill="#ffffff">2018</text><text x="200" y="304" font-size="12" text-anchor="middle" class="gr">PROTODUNE</text><text x="200" y="320" font-size="12" text-anchor="middle" class="gr">ONLINE AT</text><text x="200" y="336" font-size="12" text-anchor="middle" class="gr">CERN</text><circle cx="260" cy="200" r="6" fill="#ffffff" stroke="#ffffff" stroke-width="2"/><line x1="260" y1="150" x2="260" y2="190" stroke="#ffffff" stroke-width="1.2" stroke-opacity=".7"/><text x="260" y="100" font-size="24" font-weight="800" text-anchor="middle" fill="#ffffff">2019</text><text x="260" y="124" font-size="12" text-anchor="middle" class="gr">FERMILAB SITE</text><text x="260" y="140" font-size="12" text-anchor="middle" class="gr">WORK BEGINS</text><circle cx="380" cy="200" r="6" fill="#ffffff" stroke="#ffffff" stroke-width="2"/><line x1="380" y1="210" x2="380" y2="250" stroke="#ffffff" stroke-width="1.2" stroke-opacity=".7"/><text x="380" y="282" font-size="24" font-weight="800" text-anchor="middle" fill="#ffffff">2021</text><text x="380" y="304" font-size="12" text-anchor="middle" class="gr">CAVERN</text><text x="380" y="320" font-size="12" text-anchor="middle" class="gr">EXCAVATION</text><text x="380" y="336" font-size="12" text-anchor="middle" class="gr">BEGINS</text><circle cx="560" cy="200" r="6" fill="#ffffff" stroke="#ffffff" stroke-width="2"/><line x1="560" y1="150" x2="560" y2="190" stroke="#ffffff" stroke-width="1.2" stroke-opacity=".7"/><text x="560" y="100" font-size="24" font-weight="800" text-anchor="middle" fill="#ffffff">2024</text><text x="560" y="124" font-size="12" text-anchor="middle" class="gr">EXCAVATION</text><text x="560" y="140" font-size="12" text-anchor="middle" class="gr">COMPLETE</text><circle cx="680" cy="200" r="8" fill="#000" stroke="#E8C27A" stroke-width="2"/><line x1="680" y1="210" x2="680" y2="250" stroke="#E8C27A" stroke-width="1.2" stroke-opacity=".7"/><text x="680" y="282" font-size="24" font-weight="800" text-anchor="middle" fill="#E8C27A">2026</text><text x="680" y="304" font-size="12" text-anchor="middle" class="gr">DETECTOR</text><text x="680" y="320" font-size="12" text-anchor="middle" class="gr">CONSTRUCTION</text><text x="680" y="336" font-size="12" text-anchor="middle" class="gr">BEGINS</text><circle cx="860" cy="200" r="8" fill="#E8C27A" stroke="#E8C27A" stroke-width="2"/><line x1="860" y1="150" x2="860" y2="190" stroke="#E8C27A" stroke-width="1.2" stroke-opacity=".7"/><text x="860" y="84" font-size="24" font-weight="800" text-anchor="middle" fill="#E8C27A">2029</text><text x="860" y="108" font-size="12" text-anchor="middle" class="gr">FIRST</text><text x="860" y="124" font-size="12" text-anchor="middle" class="gr">DETECTOR</text><text x="860" y="140" font-size="12" text-anchor="middle" class="gr">OPERATING</text><text x="680" y="375" font-size="12" text-anchor="middle" class="gd">WE ARE HERE</text></svg></div>
+  </div>
+  <div class="hud-cap"><p class="mono cursor" data-decode>We are here: 2026, detector construction starts in the caverns. First detector operating: 2029.</p></div>
+  <p class="src">SRC <b>[6]</b> Fermilab DUNE fact sheet</p>
+</section>
+
+<!-- 9 NEAR DETECTOR : HUD -->
+<section class="scene l-hud" id="s9" data-notes="Say we see fewer muon neutrinos than expected in South Dakota. Is that oscillation, or did we make fewer neutrinos than we thought, or do they interact with argon less often than our models say? With one detector you can't tell, because you only count flux times cross-section times efficiency. The near detector sits 574 m from the target, before any oscillation, and measures the same beam with argon-based technology. We use it to predict the far spectrum with no oscillation, then compare. Shared uncertainties largely cancel, like weighing yourself on the same scale before and after. A 2x2 prototype of the near detector has been recording neutrinos at Fermilab since 2024.">
+  <div class="hud-head"><span class="plus" aria-hidden="true"></span><h2 class="heavy"><span data-glitch>Near_detector</span></h2><span class="tasktag">[ TASK 6(C) ]</span></div>
+  <div class="frame solid" data-frame>
+    <div class="fill"></div>
+    <div class="content">
+      <svg class="d" viewBox="0 0 1000 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Two energy spectra. Near detector: a smooth hump of events. Far detector: bars well below the dashed no-oscillation prediction, with a deep dip near 2.6 GeV where muon neutrinos disappeared.">
+        <text x="20" y="34" class="bl" font-size="15" font-weight="700">NEAR · WHAT WE SENT</text>
+        <text x="540" y="34" font-size="15" font-weight="700">FAR · WHAT ARRIVED</text>
+        <g fill="#5FA8FF">
+          <rect x="30" y="300" width="40" height="30"/><rect x="78" y="240" width="40" height="90"/><rect x="126" y="160" width="40" height="170"/><rect x="174" y="100" width="40" height="230"/><rect x="222" y="86" width="40" height="244"/><rect x="270" y="130" width="40" height="200"/><rect x="318" y="196" width="40" height="134"/><rect x="366" y="262" width="40" height="68"/><rect x="414" y="302" width="40" height="28"/>
+        </g>
+        <g fill="#fff" opacity=".9">
+          <rect x="550" y="310" width="40" height="20"/><rect x="598" y="268" width="40" height="62"/><rect x="646" y="256" width="40" height="74"/><rect x="694" y="306" width="40" height="24"/><rect x="742" y="318" width="40" height="12"/><rect x="790" y="270" width="40" height="60"/><rect x="838" y="256" width="40" height="74"/><rect x="886" y="286" width="40" height="44"/><rect x="934" y="312" width="40" height="18"/>
+        </g>
+        <path d="M550 300 H590 V240 H638 V160 H686 V100 H734 V86 H782 V130 H830 V196 H878 V262 H926 V302 H974 V330" fill="none" stroke="#E8C27A" stroke-width="2" stroke-dasharray="8 5"/>
+        <line class="ln" x1="20" y1="330" x2="470" y2="330"/><line class="ln" x1="540" y1="330" x2="990" y2="330"/>
+        <text x="245" y="358" class="gr" font-size="12" text-anchor="middle">NEUTRINO ENERGY (GEV) →</text>
+        <text x="765" y="358" class="gr" font-size="12" text-anchor="middle">NEUTRINO ENERGY (GEV) →</text>
+        <text x="740" y="240" class="gd" font-size="12" text-anchor="middle">νμ DISAPPEARANCE DIP</text>
+        <text x="765" y="384" class="gd" font-size="11" text-anchor="middle">DASHED: FAR PREDICTION WITH NO OSCILLATION</text>
+      </svg>
+    </div>
+  </div>
+  <div class="hud-cap"><p class="mono cursor" data-decode>Counts = flux × cross-section × efficiency. Measure them 574 m from the target, before oscillation, and shared uncertainties cancel in the near–far comparison.</p></div>
+  <p class="src">SRC <b>[8] [9]</b></p>
+</section>
+
+<!-- ND-LAr : spec layout over photo -->
+<section class="scene l-spec" id="sNdlar" data-notes="The main near detector is ND-LAr: a 7-by-5 grid of 35 liquid-argon modules, each 1 by 1 by 3 metres, about 67 tonnes fiducial. It's close to a very intense beam, so it sees around a hundred interactions in every 1.2 MW beam spill; that's why it uses pixel readout, under 4 mm, more than 14 million channels, giving true 3D images. With PRISM, the whole system moves sideways up to 28.5 m, 2.8 degrees off-axis, to sample different neutrino energies. A muon spectrometer, TMS, catches muons that leave it, and SAND stays on-axis to monitor the beam. Source: DUNE near detector talk, May 2025.">
+  <div class="bg" style="opacity:.42"><img src="assets/nd_modules.jpg" alt="Inside a test cryostat: liquid-argon detector modules surrounded by bundled readout cables"></div><div class="shade"></div>
+  <div class="name">
+    <span class="tiny">Near detector · liquid argon · 574 m from target</span>
+    <span class="big">ND-LAr</span>
+  </div>
+  <div class="dialrow">
+    <div class="dial" aria-hidden="true">
+      <svg viewBox="0 0 120 120"><path d="M60 4 A56 56 0 0 1 116 60" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M104 96 A56 56 0 0 1 22 101" fill="none" stroke="#fff" stroke-width="1.2"/></svg>
+      <div class="lbl"><span>7×5</span><span>35</span></div>
+    </div>
+    <span class="plus" aria-hidden="true"></span>
+    <div class="note mono">
+      <p style="margin:0" data-decode>35 modules, each 1×1×3 m · ~67 t fiducial</p>
+      <p style="margin:0" data-decode>Pixel readout ≲4 mm · &gt;14 million channels</p>
+      <p style="margin:0" class="cursor" data-decode>PRISM: moves up to 28.5 m off-axis (2.8°)</p>
+    </div>
+  </div>
+  <div class="side mono grey"><p style="margin:0" data-decode>~100 interactions per 1.2 MW beam spill. Only true 3D pixel images can pull them apart.</p></div>
+  <p class="credit">Photo: prototype argon modules in a test cryostat · facts: DUNE ND talk, NEAT workshop, May 2025</p>
+  <p class="src">SRC <b>[8] [9]</b></p>
+</section>
+
+<!-- 10 CP TRAP : scene + bottom-left title -->
+<section class="scene l-title" id="s10" data-notes="DUNE measures muon-neutrino disappearance and electron-neutrino appearance as functions of energy, then flips the horns and repeats with antineutrinos. If neutrinos and antineutrinos oscillate differently, that's CP violation, which could help explain why the universe is made of matter. But the trap: Earth contains electrons, not positrons. Electron neutrinos interact with those electrons via W exchange; electron antineutrinos feel the effect with the opposite sign. So even with zero CP violation, Earth alone makes them differ. The way out is that the matter effect and delta-CP distort the energy spectrum in different shapes, and the matter effect is calculable, so DUNE fits both. The matter effect is also the mass-ordering signal: normal ordering boosts neutrino appearance, inverted boosts antineutrino appearance.">
+  <div class="block" style="bottom:14vh">
+    <h2 class="heavy"><span data-glitch>Matter_≠_CP</span></h2>
+    <div class="row"><span class="plus" aria-hidden="true"></span>
+      <div class="mono" style="display:grid;gap:14px">
+        <p style="margin:0" data-decode>Earth has electrons, not positrons, so matter alone treats νₑ and ν̄ₑ differently. A difference is not automatically CP violation.</p>
+        <div class="toggles" role="group" aria-label="Choose what the beam travels through">
+          <button type="button" class="tog" data-mode="0" aria-pressed="false">VACUUM, NO CP</button>
+          <button type="button" class="tog" data-mode="1" aria-pressed="false">EARTH'S MATTER</button>
+          <button type="button" class="tog" data-mode="2" aria-pressed="true">MATTER + δ_CP</button>
+        </div>
+        <p class="verdict" id="verdict" style="margin:0"></p>
+        <p style="margin:0" class="grey cursor">Blue: ν beam · gold: ν̄ beam · x: energy 0.5–6 GeV · y: νₑ appearance · illustrative shapes</p>
+      </div>
+    </div>
+  </div>
+  <p class="src">SRC <b>[4]</b></p>
+</section>
+
+<!-- EXPECTED RESULTS : HUD bar chart -->
+<section class="scene l-hud" id="sRes" data-notes="So what results does DUNE expect? These numbers come from DUNE's 2018 design report, for the staged plan. Within about 3 years, it could see CP violation at 3 sigma if delta-CP is near minus pi over 2. In about 6 years, it should settle the mass ordering at 5 sigma, whatever delta-CP turns out to be. 5 sigma is the physics standard for discovery: about a 1 in 3.5 million chance that a fluke produced the result. After 9 years, it could claim CP violation at 5 sigma for half of all possible delta-CP values. Nobody can cover 100 percent: if delta-CP is 0 or pi, there is no CP violation to find. These are projections, and the schedule has moved since 2018.">
+  <div class="hud-head"><span class="plus" aria-hidden="true"></span><h2 class="heavy"><span data-glitch>Expected_results</span></h2></div>
+  <div class="frame solid" data-frame>
+    <div class="fill"></div>
+    <div class="content"><svg class="d" viewBox="0 0 1000 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Bar chart from the DUNE 2018 design report: years of running needed for each milestone. CP violation at 3 sigma if delta-CP is minus pi over 2: 3 years. Mass ordering at 5 sigma for every delta-CP: 6 years. CP violation at 5 sigma if delta-CP is minus pi over 2: 6.5 years. CP violation at 5 sigma for 50 percent of delta-CP values: 9 years. CP violation at 3 sigma for 75 percent of values: 12.5 years."><text x="342" y="68" font-size="14" font-weight="700" text-anchor="end">CP VIOLATION AT 3Σ</text><text x="342" y="86" font-size="12" text-anchor="end" class="gr">IF Δ_CP = −Π/2</text><rect x="360" y="52" width="126" height="26" fill="#E8C27A" opacity=".9"/><text x="496" y="70" font-size="15" font-weight="800">3 YR</text><text x="342" y="126" font-size="14" font-weight="700" text-anchor="end">MASS ORDERING AT 5Σ</text><text x="342" y="144" font-size="12" text-anchor="end" class="gr">FOR EVERY Δ_CP</text><rect x="360" y="110" width="252" height="26" fill="#5FA8FF" opacity=".9"/><text x="622" y="128" font-size="15" font-weight="800">6 YR</text><text x="342" y="184" font-size="14" font-weight="700" text-anchor="end">CP VIOLATION AT 5Σ</text><text x="342" y="202" font-size="12" text-anchor="end" class="gr">IF Δ_CP = −Π/2</text><rect x="360" y="168" width="273" height="26" fill="#E8C27A" opacity=".9"/><text x="643" y="186" font-size="15" font-weight="800">6.5 YR</text><text x="342" y="242" font-size="14" font-weight="700" text-anchor="end">CP VIOLATION AT 5Σ</text><text x="342" y="260" font-size="12" text-anchor="end" class="gr">FOR 50% OF Δ_CP VALUES</text><rect x="360" y="226" width="378" height="26" fill="#E8C27A" opacity=".9"/><text x="748" y="244" font-size="15" font-weight="800">9 YR</text><text x="342" y="300" font-size="14" font-weight="700" text-anchor="end">CP VIOLATION AT 3Σ</text><text x="342" y="318" font-size="12" text-anchor="end" class="gr">FOR 75% OF Δ_CP VALUES</text><rect x="360" y="284" width="525" height="26" fill="#E8C27A" opacity=".9"/><text x="895" y="302" font-size="15" font-weight="800">12.5 YR</text><line x1="360" y1="345" x2="948" y2="345" stroke="#fff" stroke-opacity=".5"/><line x1="360" y1="345" x2="360" y2="351" stroke="#fff" stroke-opacity=".5"/><text x="360" y="368" font-size="12" text-anchor="middle" class="gr">0</text><line x1="444" y1="345" x2="444" y2="351" stroke="#fff" stroke-opacity=".5"/><text x="444" y="368" font-size="12" text-anchor="middle" class="gr">2</text><line x1="528" y1="345" x2="528" y2="351" stroke="#fff" stroke-opacity=".5"/><text x="528" y="368" font-size="12" text-anchor="middle" class="gr">4</text><line x1="612" y1="345" x2="612" y2="351" stroke="#fff" stroke-opacity=".5"/><text x="612" y="368" font-size="12" text-anchor="middle" class="gr">6</text><line x1="696" y1="345" x2="696" y2="351" stroke="#fff" stroke-opacity=".5"/><text x="696" y="368" font-size="12" text-anchor="middle" class="gr">8</text><line x1="780" y1="345" x2="780" y2="351" stroke="#fff" stroke-opacity=".5"/><text x="780" y="368" font-size="12" text-anchor="middle" class="gr">10</text><line x1="864" y1="345" x2="864" y2="351" stroke="#fff" stroke-opacity=".5"/><text x="864" y="368" font-size="12" text-anchor="middle" class="gr">12</text><line x1="948" y1="345" x2="948" y2="351" stroke="#fff" stroke-opacity=".5"/><text x="948" y="368" font-size="12" text-anchor="middle" class="gr">14</text><text x="948" y="390" font-size="12" text-anchor="end" class="gr">YEARS OF RUNNING (2018 STAGED PLAN, NORMAL ORDERING)</text></svg></div>
+  </div>
+  <div class="hud-cap"><p class="mono cursor" data-decode>5σ = discovery: about a 1-in-3.5-million chance of a fluke. Projections, not results yet. No experiment can cover 100% of δ_CP: at 0 or π there is no CP violation.</p></div>
+  <p class="src">SRC <b>[4]</b> DUNE FD Interim Design Report Vol. 1, Table 2.1</p>
+</section>
+
+<!-- 11 HYPER-K : HUD -->
+<section class="scene l-hud" id="s11" data-notes="Hyper-Kamiokande in Japan is the other giant: 260,000 tonnes of water watched by about 40,000 photomultipliers. A charged particle faster than light travels in water, c over n, emits a cone of light, seen as a ring: sharp for muons, fuzzy for electrons because they shower. Water is cheap, so it can be huge, but particles below the Cherenkov threshold are invisible, and a neutral pion's photons can mimic an electron. DUNE's argon shows every charged track in 3D and can tell an electron from a photon, but needs ultra-pure argon at about minus 184 degrees Celsius. Hyper-K uses a 295 km baseline at about 0.6 GeV, so a small matter effect and a cleaner view of CP; DUNE's 1,300 km gives a big matter effect, great for mass ordering. If both agree, the evidence is far stronger.">
+  <div class="hud-head"><span class="plus" aria-hidden="true"></span><h2 class="heavy"><span data-glitch>Rings_vs_tracks</span></h2><span class="tasktag">[ TASK 6(D) ]</span></div>
+  <div class="frame" data-frame>
+    <span class="edge t" style="left:25%">WATER CHERENKOV · HYPER-K</span>
+    <span class="edge t" style="left:75%;color:var(--violet)">LIQUID-ARGON TPC · DUNE</span>
+    <span class="edge b" style="left:25%"><span style="color:var(--blue)">μ: CRISP RING</span> · <span style="color:var(--gold)">e: FUZZY RING</span></span>
+    <span class="edge b" style="left:75%"><span style="color:var(--blue)">μ⁻ TRACK</span> · PROTON STUB · <span style="color:var(--gold)">e⁻ SHOWER</span></span>
+  </div>
+  <div class="cols">
+    <p class="mono" data-decode>Hyper-K: 295 km, ~0.6 GeV, 260 kt water, ~40,000 PMTs. Light only if v &gt; c/n: slow particles invisible; π⁰ can mimic e⁻. Small matter effect: cleaner CP. Aims to start 2028.</p>
+    <p class="mono cursor" data-decode>DUNE: 1,300 km, ~2–3 GeV, liquid argon. Every charged track in 3D; tells e⁻ from γ. Needs ultra-pure argon at −184 °C (−300 °F). Big matter effect: mass ordering.</p>
+  </div>
+  <p class="src">SRC <b>[13]</b></p>
+</section>
+
+<!-- 12 WHY : scene + bottom-left title -->
+<section class="scene l-title" id="s12" data-notes="So, why fire neutrinos through 1,300 km of solid rock? One: the distance is tuned so a few-GeV beam arrives at the first oscillation peak. Two: the matter it crosses lets us work out the mass ordering, as long as we don't mistake it for CP violation. Three: the rock above the detector shields it from cosmic rays.">
+  <div class="block">
+    <h2 class="heavy"><span data-glitch>// Why_1300_km</span></h2>
+    <div class="row"><span class="plus" aria-hidden="true"></span>
+      <div class="mono" style="display:grid;gap:8px">
+        <p style="margin:0" data-decode>Distance → tunes a few-GeV beam to the first oscillation maximum</p>
+        <p style="margin:0" data-decode>Earth's matter → reveals the mass ordering, if not mistaken for CP</p>
+        <p style="margin:0" data-decode>Rock overhead → shields the far detector from cosmic muons</p>
+        <p style="margin:6px 0 0" class="grey cursor" data-decode>Scale: Earth is 12,742 km across. The 1,285 km chord dips only about 32 km below the surface.</p>
+      </div>
+    </div>
+  </div>
+  <p class="src">SRC <b>[2] [3]</b></p>
+</section>
+
+<!-- COLLABORATION : word / frame / word -->
+<section class="scene l-sandwich" id="sCollab" data-notes="And it's not one lab. More than 1,500 scientists and engineers from over 35 countries, at more than 200 institutions, are building DUNE. The orange countries on this map take part.">
+  <div class="bg" style="opacity:.16"><img src="assets/electronics.jpg" alt=""></div>
+  <h2 class="heavy"><span data-glitch>1,500+ scientists</span></h2>
+  <div class="frame map" data-frame>
+    <div class="photos"><img class="on contain" src="assets/collab_map.png" alt="World map with participating countries in orange, including the USA, Canada, Mexico, Brazil, much of Europe, India, China and Japan"></div>
+  </div>
+  <h2 class="heavy"><span data-glitch>35+ countries</span></h2>
+  <p class="mono grey cursor" style="margin:0;text-align:center" data-decode>200+ institutions · orange: participating countries (map supplied by DUNE; membership changes over time)</p>
+  <p class="src">SRC <b>[2] [6]</b></p>
+</section>
+
+<!-- REFERENCES -->
+<section class="scene l-hud" id="sRefs" data-notes="Our sources are listed here, numbered to match the small SRC tags in the corner of each scene.">
+  <div class="hud-head"><span class="plus" aria-hidden="true"></span><h2 class="heavy"><span data-glitch>Sources</span></h2></div>
+  <ol class="refs"><li><b>[1]</b>DUNE Collaboration. DUNE: Deep Underground Neutrino Experiment. <a href="https://www.dunescience.org/" target="_blank" rel="noopener">www.dunescience.org/</a></li><li><b>[2]</b>Fermilab LBNF/DUNE. Technology highlights and capabilities. <a href="https://lbnf-dune.fnal.gov/about/technology-highlights-and-capabilities/" target="_blank" rel="noopener">lbnf-dune.fnal.gov/about/technology-highlights-and-capabilities/</a></li><li><b>[3]</b>Fermilab LBNF/DUNE. Project overview. <a href="https://lbnf-dune.fnal.gov/about/overview/" target="_blank" rel="noopener">lbnf-dune.fnal.gov/about/overview/</a></li><li><b>[4]</b>DUNE Collaboration (2018). The DUNE Far Detector Interim Design Report, Vol. 1: Physics, Technology &amp; Strategies. FERMILAB-DESIGN-2018-02. <a href="https://cds.cern.ch/record/2632820/files/fermilab-design-2018-02.pdf" target="_blank" rel="noopener">cds.cern.ch/record/2632820/files/fermilab-design-2018-02.pdf</a></li><li><b>[5]</b>DUNE Collaboration (2018). The DUNE Far Detector Interim Design Report, Vol. 2: Single-Phase Module. arXiv:1807.10327. <a href="https://arxiv.org/abs/1807.10327" target="_blank" rel="noopener">arxiv.org/abs/1807.10327</a></li><li><b>[6]</b>Fermilab. Deep Underground Neutrino Experiment fact sheet. <a href="https://news.fnal.gov/wp-content/uploads/dune_fact_sheet.pdf" target="_blank" rel="noopener">news.fnal.gov/wp-content/uploads/dune_fact_sheet.pdf</a></li><li><b>[7]</b>Fermilab LBNF/DUNE. How it works: neutrino beam; detectors and computing; milestones. <a href="https://lbnf-dune.fnal.gov/how-it-works/neutrino-beam/" target="_blank" rel="noopener">lbnf-dune.fnal.gov/how-it-works/neutrino-beam/</a></li><li><b>[8]</b>K. Wood for the DUNE Collaboration (2025). The DUNE Near Detector. NEAT Workshop, Colorado State University, 29 May 2025 (slides).</li><li><b>[9]</b>DUNE Collaboration (2025). DUNE: science and status. arXiv:2502.08493. <a href="https://arxiv.org/abs/2502.08493" target="_blank" rel="noopener">arxiv.org/abs/2502.08493</a></li><li><b>[10]</b>Brookhaven National Laboratory (2024). Excavation of colossal caverns for Fermilab's DUNE experiment completed; Fermilab (2026). Largest neutrino experiment in the US wins Project of the Year award. <a href="https://www.bnl.gov/newsroom/news.php?a=121696" target="_blank" rel="noopener">www.bnl.gov/newsroom/news.php?a=121696</a></li><li><b>[11]</b>Sanford Underground Research Facility. The Davis experiment; Our story. <a href="https://sanfordlab.org/experiments/davis-experiment" target="_blank" rel="noopener">sanfordlab.org/experiments/davis-experiment</a></li><li><b>[12]</b>DUNE Collaboration (2021). Supernova neutrino burst detection with DUNE. arXiv:1910.11068. <a href="https://arxiv.org/abs/1910.11068" target="_blank" rel="noopener">arxiv.org/abs/1910.11068</a></li><li><b>[13]</b>ICRR, University of Tokyo. Hyper-Kamiokande: outline. <a href="https://www-sk.icrr.u-tokyo.ac.jp/en/hk/about/outline/" target="_blank" rel="noopener">www-sk.icrr.u-tokyo.ac.jp/en/hk/about/outline/</a></li><li><b>[14]</b>Standard physics and history: Pauli (1930); Cowan &amp; Reines (1956); Super-Kamiokande (1998); Nobel Prizes 2002 and 2015; OPERA (2011); KATRIN (2025); Particle Data Group pion lifetime.</li></ol>
+  <p class="src" style="max-width:84vw">IMAGES: NASA (Blue Marble, ACRIMSAT, AIM models) · Fermilab / LBNF-DUNE · CERN · Sanford Underground Research Facility</p>
+</section>
+
+<!-- 13 CLOSING -->
+<section class="scene l-close" id="s13" data-notes="It's being built now, and some of you might be working on it by the time it publishes. The question it's chasing is why there's something rather than nothing. Thank you. Questions?">
+  <svg class="mark" viewBox="0 0 120 120" aria-hidden="true">
+    <circle cx="60" cy="60" r="44" fill="none" stroke="#5FA8FF" stroke-width="3"/>
+    <path d="M14 76 Q60 40 106 76" fill="none" stroke="#E8C27A" stroke-width="3" stroke-dasharray="6 5"/>
+    <circle cx="60" cy="60" r="5" fill="#fff"/>
+  </svg>
+  <div class="logo">DUNE</div>
+  <p class="closing">The rock is <b>part of the instrument.</b></p>
+  <a class="contact" href="https://lbnf-dune.fnal.gov/about/overview/" target="_blank" rel="noopener">[ LBNF-DUNE.FNAL.GOV ]</a>
+  <p class="mono status" style="margin:18px 0 0">Under construction · not yet taking beam data · Group 4, A-Level Physics</p>
+  <p class="mono status" style="margin:6px 0 0;font-size:10px">Images and models: NASA (Blue Marble, ACRIMSAT, AIM) · Photos and diagrams: Fermilab, LBNF/DUNE, CERN, Sanford Lab · Facts: DUNE FD Interim Design Report (2018), DUNE ND talk (2025)</p>
+  <button type="button" class="replay" id="replay">REPLAY EXPERIENCE</button>
+</section>
+
+</main>
+
+<aside id="notes" hidden aria-live="polite"><b>SPEAKER NOTES · PRESS N TO HIDE</b><span id="notesText"></span></aside>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+(function(){
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sections = [...document.querySelectorAll('.scene')];
+const N = sections.length;
+
+/* ================= loader + hero assemble ================= */
+const loader = document.getElementById('loader');
+const heroTitle = document.getElementById('heroTitle');
+heroTitle.querySelectorAll('.line').forEach(line => {
+  const t = line.textContent; line.textContent = '';
+  for (const c of t) {
+    const s = document.createElement('span');
+    s.className = 'ch'; s.textContent = c === ' ' ? ' ' : c; s.setAttribute('aria-hidden','true');
+    line.appendChild(s);
+  }
+});
+const chars = [...heroTitle.querySelectorAll('.ch')];
+function scatter(){
+  if (reduce) return;
+  chars.forEach(c => {
+    c.style.transition = 'none';
+    c.style.transform = `translate(${(Math.random()-.5)*70}vw, ${(Math.random()-.5)*40}vh) scale(${.6+Math.random()*1.2})`;
+    c.classList.add('scatter');
+  });
+}
+function assemble(){
+  if (reduce) return;
+  void heroTitle.offsetWidth;
+  chars.forEach((c,i) => {
+    c.style.transition = '';
+    c.style.transitionDelay = (Math.random()*.5 + i*0.012) + 's';
+    c.style.transform = 'none';
+    c.classList.remove('scatter');
+  });
+}
+let loaderDone = false;
+function endLoader(){
+  if (loaderDone) return; loaderDone = true;
+  loader.classList.add('done');
+  setTimeout(() => { loader.hidden = true; }, 950);
+  requestAnimationFrame(() => requestAnimationFrame(assemble));
+}
+scatter();
+loader.addEventListener('click', endLoader);
+setTimeout(endLoader, reduce ? 200 : 2300);
+
+/* ================= logo glitch ================= */
+const logoSpans = [...document.querySelectorAll('#logo span')];
+function logoGlitch(){
+  if (!reduce) {
+    const s = logoSpans[(Math.random()*logoSpans.length)|0];
+    s.classList.add('off');
+    setTimeout(() => s.classList.remove('off'), 90 + Math.random()*260);
+    if (Math.random() < .35) { const s2 = logoSpans[(Math.random()*logoSpans.length)|0]; setTimeout(()=>{ s2.classList.add('off'); setTimeout(()=>s2.classList.remove('off'),110); }, 160); }
+  }
+  setTimeout(logoGlitch, 2200 + Math.random()*3200);
+}
+setTimeout(logoGlitch, 3500);
+
+/* ================= decode text + glitch titles ================= */
+const GLY = '_/\\<>=#-:*[]';
+function decode(el){
+  if (reduce) return;
+  const final = el.dataset.final || (el.dataset.final = el.textContent);
+  const n = final.length, dur = Math.min(1700, 350 + n*16), t0 = performance.now();
+  function frame(now){
+    const k = Math.min(1, (now - t0)/dur), head = k*n;
+    let s = '';
+    for (let i=0;i<n;i++){
+      if (i < head) s += final[i];
+      else if (i < head + 4) s += final[i] === ' ' ? ' ' : GLY[(Math.random()*GLY.length)|0];
+      else break;
+    }
+    el.textContent = s;
+    if (k < 1) requestAnimationFrame(frame); else el.textContent = final;
+  }
+  requestAnimationFrame(frame);
+}
+const glitchEls = [...document.querySelectorAll('[data-glitch]')];
+glitchEls.forEach(el => el.dataset.final = el.textContent);
+function titleGlitch(el){
+  const f = el.dataset.final, idx = [];
+  for (let i=0;i<f.length;i++) if (/[A-Za-z0-9]/.test(f[i])) idx.push(i);
+  if (!idx.length) return;
+  const i = idx[(Math.random()*idx.length)|0];
+  el.textContent = f.slice(0,i) + '_' + f.slice(i+1);
+  setTimeout(() => { el.textContent = f; }, 140 + Math.random()*200);
+}
+const seen = new WeakSet();
+const io = new IntersectionObserver(es => es.forEach(e => {
+  if (!e.isIntersecting) return;
+  if (!seen.has(e.target)) { seen.add(e.target); e.target.querySelectorAll('[data-decode]').forEach(decode); }
+}), {threshold: .45});
+sections.forEach(s => io.observe(s));
+setInterval(() => {
+  if (reduce) return;
+  const vis = glitchEls.filter(el => { const r = el.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; });
+  if (vis.length && Math.random() < .7) titleGlitch(vis[(Math.random()*vis.length)|0]);
+}, 1600);
+
+/* ================= slideshows (■□ indicator) ================= */
+document.querySelectorAll('[data-slides]').forEach(fr => {
+  const imgs = [...fr.querySelectorAll('.photos img')], box = fr.querySelector('.sqs'), cap = document.getElementById(fr.dataset.cap);
+  let i = 0;
+  const btns = imgs.map((im, k) => { const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Image ' + (k+1)); b.addEventListener('click', e => { e.stopPropagation(); show(k); }); box.appendChild(b); return b; });
+  function show(k, quiet){
+    i = (k + imgs.length) % imgs.length;
+    imgs.forEach((im, j) => im.classList.toggle('on', j === i));
+    btns.forEach((b, j) => b.setAttribute('aria-current', j === i ? 'true' : 'false'));
+    if (cap && !quiet) { cap.dataset.final = imgs[i].dataset.cap; cap.textContent = imgs[i].dataset.cap; decode(cap); }
+  }
+  fr.addEventListener('click', () => { show(i + 1); if (typeof blip === 'function') blip(); });
+  show(0, true);
+  setInterval(() => { if (reduce) return; const r = fr.getBoundingClientRect(); if (r.top < innerHeight*.75 && r.bottom > innerHeight*.25) show(i + 1); }, 6000);
+});
+
+/* ================= HUD frames ================= */
+function drawFrame(fr){
+  const w = fr.clientWidth, h = fr.clientHeight;
+  if (!w || !h) return;
+  let svg = fr.querySelector('svg.fr');
+  if (!svg) { svg = document.createElementNS('http://www.w3.org/2000/svg','svg'); svg.setAttribute('class','fr'); svg.setAttribute('aria-hidden','true'); fr.prepend(svg); }
+  const c = Math.min(52, w*.06), cy = Math.min(32, h*.07), t = Math.min(18, w*.02);
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  const tick = (x,y,dx,dy) => `<line x1="${x}" y1="${y}" x2="${x+dx*28}" y2="${y}" /><line x1="${x+dx*42}" y1="${y-dy*12}" x2="${x+dx*42}" y2="${y-dy*40}" />`;
+  svg.innerHTML = `
+    <g fill="none" stroke="#fff" stroke-width="1.4">
+      <polyline points="${c},0 ${w-c},0" opacity=".9"/>
+      <polyline points="${c},${h} ${w-c},${h}" opacity=".9"/>
+      <polyline points="${c},0 0,${cy} 0,${h*.24}" /><polyline points="0,${h*.76} 0,${h-cy} ${c},${h}" />
+      <polyline points="${w-c},0 ${w},${cy} ${w},${h*.24}" /><polyline points="${w},${h*.76} ${w},${h-cy} ${w-c},${h}" />
+    </g>
+    <polygon points="-4,${h*.3} ${t},${h*.34} ${t},${h*.66} -4,${h*.7}" fill="#fff"/>
+    <polygon points="${w+4},${h*.3} ${w-t},${h*.34} ${w-t},${h*.66} ${w+4},${h*.7}" fill="#fff"/>
+    <g stroke="#fff" stroke-width="1.2" opacity=".85">
+      ${tick(-90,30,1,1)}${tick(w+90,30,-1,1)}${tick(-90,h-30,1,-1)}${tick(w+90,h-30,-1,-1)}
+    </g>
+    ${fr.hasAttribute('data-slides') ? '' : `<g transform="translate(${w-30},-16)"><rect width="9" height="9" fill="#fff"/><rect x="13" width="9" height="9" fill="none" stroke="#fff"/></g>`}`;
+}
+const frames = [...document.querySelectorAll('[data-frame]')];
+const ro = new ResizeObserver(() => frames.forEach(drawFrame));
+frames.forEach(f => { drawFrame(f); ro.observe(f); });
+
+/* ================= counter ================= */
+const RATE = 3.2e14, tStart = performance.now(), countEl = document.getElementById('count');
+const SUP = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+setInterval(() => {
+  const n = (performance.now() - tStart)/1000*RATE;
+  if (n < 1) return;
+  const e = Math.floor(Math.log10(n)), m = n/Math.pow(10,e);
+  countEl.textContent = m.toFixed(2) + ' × 10' + String(e).split('').map(c => SUP[c]).join('');
+}, 80);
+
+/* ================= scroll position ================= */
+let tops = [], heights = [];
+function measure(){ tops = sections.map(s => s.offsetTop); heights = sections.map(s => s.offsetHeight); }
+measure(); addEventListener('resize', measure);
+function progress(){
+  const y = scrollY + innerHeight*0.0;
+  let i = 0; while (i < N-1 && tops[i+1] <= y) i++;
+  return Math.min(N-1, i + Math.min(1, Math.max(0, (y - tops[i]) / heights[i])));
+}
+function goTo(i){ i = Math.max(0, Math.min(N-1, i)); sections[i].scrollIntoView({behavior: reduce ? 'auto' : 'smooth'}); }
+
+/* ================= audio ================= */
+const audioBtn = document.getElementById('audio');
+let actx = null, master = null;
+function startAudio(){
+  try {
+    if (!actx) {
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      master = actx.createGain(); master.gain.value = 0; master.connect(actx.destination);
+      const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 260; lp.Q.value = 6; lp.connect(master);
+      [55, 55.35, 82.4].forEach((f,i) => { const o = actx.createOscillator(); o.type = i===2 ? 'sine' : 'sawtooth'; o.frequency.value = f; const g = actx.createGain(); g.gain.value = i===2 ? .25 : .18; o.connect(g); g.connect(lp); o.start(); });
+      const lfo = actx.createOscillator(); lfo.frequency.value = .07; const lg = actx.createGain(); lg.gain.value = 120; lfo.connect(lg); lg.connect(lp.frequency); lfo.start();
+      const buf = actx.createBuffer(1, actx.sampleRate*2, actx.sampleRate), d = buf.getChannelData(0);
+      for (let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
+      const ns = actx.createBufferSource(); ns.buffer = buf; ns.loop = true;
+      const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = .7;
+      const ng = actx.createGain(); ng.gain.value = .035; ns.connect(bp); bp.connect(ng); ng.connect(master); ns.start();
+    }
+    actx.resume();
+    master.gain.cancelScheduledValues(actx.currentTime);
+    master.gain.setTargetAtTime(.32, actx.currentTime, .8);
+    audioBtn.setAttribute('aria-pressed','true');
+  } catch(e) { audioBtn.setAttribute('aria-pressed','false'); }
+}
+function stopAudio(){
+  if (actx && master) master.gain.setTargetAtTime(0, actx.currentTime, .3);
+  audioBtn.setAttribute('aria-pressed','false');
+}
+function blip(){
+  if (!actx || audioBtn.getAttribute('aria-pressed') !== 'true') return;
+  const o = actx.createOscillator(), g = actx.createGain(); o.type = 'sine';
+  o.frequency.setValueAtTime(1320, actx.currentTime); o.frequency.exponentialRampToValueAtTime(660, actx.currentTime+.18);
+  g.gain.setValueAtTime(.05, actx.currentTime); g.gain.exponentialRampToValueAtTime(.0001, actx.currentTime+.25);
+  o.connect(g); g.connect(master); o.start(); o.stop(actx.currentTime+.3);
+}
+audioBtn.addEventListener('click', () => audioBtn.getAttribute('aria-pressed') === 'true' ? stopAudio() : startAudio());
+document.getElementById('initiate').addEventListener('click', () => { startAudio(); goTo(1); });
+
+/* ================= notes + keys ================= */
+const notes = document.getElementById('notes'), notesText = document.getElementById('notesText');
+let curIdx = 0;
+function updateNotes(){ notesText.textContent = sections[curIdx].dataset.notes || ''; }
+document.addEventListener('keydown', e => {
+  const tag = (e.target.tagName||'').toLowerCase();
+  if (tag === 'input' || tag === 'textarea') return;
+  if (e.key === 'n' || e.key === 'N') { notes.hidden = !notes.hidden; updateNotes(); return; }
+  if (tag === 'button') { if (e.key === ' ' || e.key === 'Enter') return; }
+  if (['ArrowRight','ArrowDown','PageDown',' '].includes(e.key)) { e.preventDefault(); goTo(curIdx + 1); }
+  if (['ArrowLeft','ArrowUp','PageUp'].includes(e.key)) { e.preventDefault(); goTo(curIdx - 1); }
+});
+
+/* ================= replay ================= */
+document.getElementById('replay').addEventListener('click', () => {
+  window.scrollTo({top:0, behavior:'auto'});
+  loader.hidden = false; loader.classList.remove('done'); loaderDone = false;
+  const st = loader.querySelector('.streak'), gl = loader.querySelector('.glow');
+  [st, gl].forEach(el => { el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; });
+  scatter();
+  setTimeout(endLoader, reduce ? 200 : 2300);
+});
+
+/* ================= oscillation slider ================= */
+const Es = document.getElementById('Eslider');
+const DM2 = 2.5e-3;
+let Ebeam = 2.6;
+function updE(){
+  Ebeam = +Es.value;
+  document.getElementById('Ebig').textContent = Ebeam.toFixed(1) + ' GeV';
+  const P = Math.pow(Math.sin(1.27*DM2*1300/Ebeam), 2);
+  document.getElementById('Pfar').textContent = Math.round(P*100) + '%';
+  document.getElementById('LEsmall').textContent = Math.round(1300/Ebeam);
+}
+Es.addEventListener('input', updE); updE();
+
+/* ================= CP toggles ================= */
+let cpMode = 2;
+const verdicts = ['Same curves. Nothing to explain.', 'Curves split with zero CP violation: Earth alone did this.', 'Extra split with a different energy shape: that part is δ_CP.'];
+const togs = [...document.querySelectorAll('.tog')];
+function setMode(m){ cpMode = m; togs.forEach(t => t.setAttribute('aria-pressed', +t.dataset.mode === m ? 'true' : 'false')); document.getElementById('verdict').textContent = verdicts[m]; blip(); }
+togs.forEach(t => t.addEventListener('click', () => setMode(+t.dataset.mode)));
+document.getElementById('verdict').textContent = verdicts[2];
+
+/* ================= WebGL stage ================= */
+let gl3 = null;
+try { if (window.THREE) gl3 = initGL(); } catch(err) { gl3 = null; }
+if (!gl3) document.documentElement.classList.add('nogl');
+
+let lastIdx = -1;
+function onFrame(now){
+  const p = progress();
+  const idx = Math.round(p);
+  if (idx !== lastIdx) { lastIdx = idx; curIdx = idx; if (!notes.hidden) updateNotes(); if (idx > 0) blip(); document.getElementById('scrollcue').style.opacity = idx <= 1 ? 1 : 0; }
+  if (gl3) gl3.render(now/1000, p);
+  requestAnimationFrame(onFrame);
+}
+requestAnimationFrame(onFrame);
+
+function initGL(){
+  const canvas = document.getElementById('gl');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x000000, 1);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, 1, .1, 400);
+  function resize(){ const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); }
+  resize(); addEventListener('resize', resize);
+
+  const groups = {};
+  function grp(name){ const g = new THREE.Group(); g.userData.mats = []; scene.add(g); groups[name] = g; return g; }
+  function reg(g, m, base){ m.transparent = true; m.depthWrite = false; m.userData.base = base; g.userData.mats.push(m); return m; }
+  function setW(g, w){
+    g.visible = w > .004; g.userData.w = w;
+    for (const m of g.userData.mats) {
+      const v = m.userData.base * w;
+      if (m.uniforms && m.uniforms.uAlpha) m.uniforms.uAlpha.value = v; else m.opacity = v;
+    }
+  }
+  const ADD = THREE.AdditiveBlending;
+  const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); const g = x.createRadialGradient(64,64,0,64,64,64); g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(.25,'rgba(255,255,255,.45)'); g.addColorStop(1,'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0,0,128,128); return new THREE.CanvasTexture(c); })();
+  function glow(g, color, size, base){ const m = reg(g, new THREE.SpriteMaterial({map:glowTex, color, blending:ADD}), base); const s = new THREE.Sprite(m); s.scale.set(size,size,1); g.add(s); return s; }
+  function tube(g, a, b, r, color, base, blending){ const geo = new THREE.TubeGeometry(new THREE.LineCurve3(a, b), 1, r, 8, false); const m = reg(g, new THREE.MeshBasicMaterial({color, blending: blending || ADD}), base); const t = new THREE.Mesh(geo, m); g.add(t); return t; }
+  function edges(g, geo, color, base, dashed){ const e = new THREE.EdgesGeometry(geo); const m = reg(g, dashed ? new THREE.LineDashedMaterial({color, dashSize:.18, gapSize:.12}) : new THREE.LineBasicMaterial({color}), base); const l = new THREE.LineSegments(e, m); if (dashed) l.computeLineDistances(); g.add(l); return l; }
+
+  const NOISE = `
+    float hash(vec3 p){ p = fract(p*0.3183099 + .1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+    float noise(vec3 x){ vec3 i = floor(x); vec3 f = fract(x); f = f*f*(3.0-2.0*f);
+      return mix(mix(mix(hash(i+vec3(0,0,0)),hash(i+vec3(1,0,0)),f.x), mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x), f.y),
+                 mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x), mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x), f.y), f.z); }
+    float fbm(vec3 p){ float v = 0.0, a = .5; for (int i=0;i<5;i++){ v += a*noise(p); p *= 2.03; a *= .5; } return v; }`;
+
+  /* ---- stars ---- */
+  const stars = grp('stars');
+  { const n = 1800, pos = new Float32Array(n*3);
+    for (let i=0;i<n;i++){ const u = Math.random()*2-1, th = Math.random()*Math.PI*2, r = 90 + Math.random()*40, s = Math.sqrt(1-u*u); pos[i*3] = r*s*Math.cos(th); pos[i*3+1] = r*u; pos[i*3+2] = r*s*Math.sin(th); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    stars.add(new THREE.Points(geo, reg(stars, new THREE.PointsMaterial({color:0xffffff, size:.22, sizeAttenuation:true}), .8))); }
+
+  /* ---- Earth ---- */
+  const earth = grp('earth');
+  const EC = new THREE.Vector3(7,-13.5,-6), ER = 14;
+  const TL = new THREE.TextureLoader();
+  const tDay = TL.load('assets/earth_atmos_2048.jpg'), tNight = TL.load('assets/earth_lights_2048.png'), tSpec = TL.load('assets/earth_specular_2048.jpg'), tCloud = TL.load('assets/earth_clouds_1024.png');
+  [tDay,tNight,tSpec,tCloud].forEach(t => { t.anisotropy = 8; });
+  const earthMat = reg(earth, new THREE.ShaderMaterial({
+    uniforms:{uAlpha:{value:1}, uLight:{value:new THREE.Vector3(-.55,.55,.62).normalize()}, tDay:{value:tDay}, tNight:{value:tNight}, tSpec:{value:tSpec}},
+    vertexShader:`varying vec3 vN; varying vec3 vV; varying vec2 vUv;
+      void main(){ vUv = uv; vec4 mv = modelViewMatrix*vec4(position,1.0); vN = normalize(normalMatrix*normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }`,
+    fragmentShader:`uniform float uAlpha; uniform vec3 uLight; uniform sampler2D tDay; uniform sampler2D tNight; uniform sampler2D tSpec; varying vec3 vN; varying vec3 vV; varying vec2 vUv;
+      void main(){
+        vec3 day = texture2D(tDay, vUv).rgb;
+        vec3 night = texture2D(tNight, vUv).rgb;
+        float spec = texture2D(tSpec, vUv).r;
+        float ndl = dot(vN, uLight);
+        float diff = clamp(ndl, 0.0, 1.0);
+        float dayMix = smoothstep(-.12, .22, ndl);
+        vec3 col = day*(.04 + 1.05*diff);
+        col = mix(night*vec3(1.0,.82,.55)*1.25, col, dayMix);
+        vec3 h = normalize(uLight + vV);
+        col += vec3(.55,.65,.8)*pow(max(dot(vN,h),0.0), 40.0)*spec*.55*diff;
+        float fres = pow(1.0 - max(dot(vN,vV),0.0), 2.6);
+        col = mix(col, vec3(.30,.55,1.0)*(.25 + diff), fres*.65);
+        gl_FragColor = vec4(col, uAlpha);
+      }`
+  }), 1);
+  earthMat.blending = THREE.NormalBlending; earthMat.depthWrite = true; earthMat.transparent = true;
+  const earthMesh = new THREE.Mesh(new THREE.SphereGeometry(ER, 128, 96), earthMat);
+  earthMesh.position.copy(EC); earthMesh.rotation.y = -.12; earth.add(earthMesh);
+  const cloudMat = reg(earth, new THREE.ShaderMaterial({
+    uniforms:{uAlpha:{value:1}, uLight:{value:new THREE.Vector3(-.55,.55,.62).normalize()}, tCloud:{value:tCloud}},
+    vertexShader:`varying vec3 vN; varying vec2 vUv; void main(){ vUv = uv; vec4 mv = modelViewMatrix*vec4(position,1.0); vN = normalize(normalMatrix*normal); gl_Position = projectionMatrix*mv; }`,
+    fragmentShader:`uniform float uAlpha; uniform vec3 uLight; uniform sampler2D tCloud; varying vec3 vN; varying vec2 vUv;
+      void main(){ float a = texture2D(tCloud, vUv).a; float diff = clamp(dot(vN,uLight),0.0,1.0); gl_FragColor = vec4(vec3(.95)*(.03 + diff), a*.95*uAlpha); }`
+  }), 1);
+  cloudMat.blending = THREE.NormalBlending;
+  const clouds = new THREE.Mesh(new THREE.SphereGeometry(ER*1.006, 128, 96), cloudMat); clouds.position.copy(EC); clouds.rotation.y = -.12; earth.add(clouds);
+  const atmMat = reg(earth, new THREE.ShaderMaterial({
+    uniforms:{uAlpha:{value:1}},
+    vertexShader:`varying vec3 vN; varying vec3 vV; void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0); vN = normalize(normalMatrix*normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }`,
+    fragmentShader:`uniform float uAlpha; varying vec3 vN; varying vec3 vV; void main(){ float i = pow(clamp(.72 + dot(vN, vV), 0.0, 1.0), 5.0); gl_FragColor = vec4(vec3(.32,.6,1.0)*i*1.6, 1.0)*uAlpha; }`,
+    side:THREE.BackSide, blending:ADD
+  }), 1);
+  const atm = new THREE.Mesh(new THREE.SphereGeometry(ER*1.045, 96, 64), atmMat); atm.position.copy(EC); earth.add(atm);
+  // rainbow-ish lens glint like the reference
+  const sun = glow(earth, 0x9fc4ff, 9, .35); sun.position.set(-9, 6, -20);
+
+  /* ---- neutrino streaks ---- */
+  const streaks = grp('streaks');
+  const SN = 110, sPos = new Float32Array(SN*6), sCol = new Float32Array(SN*6), sData = [];
+  const sGeo = new THREE.BufferGeometry(); sGeo.setAttribute('position', new THREE.BufferAttribute(sPos,3)); sGeo.setAttribute('color', new THREE.BufferAttribute(sCol,3));
+  streaks.add(new THREE.LineSegments(sGeo, reg(streaks, new THREE.LineBasicMaterial({vertexColors:true, blending:ADD}), 1)));
+  const DIR = new THREE.Vector3(1,-.2,.06).normalize();
+  function spawnStreak(i, anywhere){
+    const gold = Math.random() < .03;
+    sData[i] = {x: anywhere ? -20 + Math.random()*38 : -26 - Math.random()*12, y: -6 + Math.random()*13, z: -12 + Math.random()*14, v: 9 + Math.random()*10, len: 1.8 + Math.random()*3.5, gold};
+  }
+  for (let i=0;i<SN;i++) spawnStreak(i, true);
+
+  /* ---- constellation ---- */
+  const cons = grp('cons');
+  { const pts = []; for (let i=0;i<11;i++) pts.push(new THREE.Vector3(-1 + Math.random()*9, -2.5 + Math.random()*6, 1.5 + Math.random()*1.5));
+    const v = [];
+    pts.forEach(p => { const s = .16; v.push(p.x-s,p.y,p.z, p.x+s,p.y,p.z, p.x,p.y-s,p.z, p.x,p.y+s,p.z); });
+    pts.forEach((p,i) => { const d = pts.map((q,j) => [q.distanceTo(p), j]).sort((a,b)=>a[0]-b[0]); [1,2].forEach(k => { const q = pts[d[k][1]]; if (d[k][0] < 4.2) v.push(p.x,p.y,p.z, q.x,q.y,q.z); }); });
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(v,3));
+    cons.add(new THREE.LineSegments(geo, reg(cons, new THREE.LineBasicMaterial({color:0xffffff}), .55))); }
+
+  /* ---- oscillation wave ---- */
+  const wave = grp('wave');
+  const WN = 600, wPos = new Float32Array(WN*3), wCol = new Float32Array(WN*3);
+  const wGeo = new THREE.BufferGeometry(); wGeo.setAttribute('position', new THREE.BufferAttribute(wPos,3)); wGeo.setAttribute('color', new THREE.BufferAttribute(wCol,3));
+  const wLine = new THREE.Line(wGeo, reg(wave, new THREE.LineBasicMaterial({vertexColors:true, blending:ADD}), 1)); wave.add(wLine);
+  const wLine2 = new THREE.Line(wGeo, reg(wave, new THREE.LineBasicMaterial({vertexColors:true, blending:ADD}), .5)); wLine2.position.y = .02; wave.add(wLine2);
+  const H2 = new THREE.Vector3();
+  { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([0,-2.2,-2, 0,2.2,-2, -.2,2.2,-2, .2,2.2,-2],3)); wave.add(new THREE.LineSegments(g, reg(wave, new THREE.LineBasicMaterial({color:0xffffff}), .8))); }
+  { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([-11,-1.6,-2, 11,-1.6,-2],3)); wave.add(new THREE.LineSegments(g, reg(wave, new THREE.LineBasicMaterial({color:0xffffff}), .25))); }
+  const packets = [0,1,2].map(i => glow(wave, 0xffffff, .9, .9));
+  const farGlow = glow(wave, 0xffffff, 1.6, .6);
+  const BLUE = new THREE.Color(0x5FA8FF), GOLD = new THREE.Color(0xE8C27A), tmpC = new THREE.Color();
+  function waveY(x, E){ const L = (x+11)/22*2600; const P = Math.pow(Math.sin(1.27*DM2*L/E), 2); return [P*3.0 - 1.6, P]; }
+
+  /* ---- argon TPC ---- */
+  const tpc = grp('tpc');
+  const tpcBox = new THREE.Group(); tpcBox.userData.mats = tpc.userData.mats; tpc.add(tpcBox);
+  edges(tpcBox, new THREE.BoxGeometry(8,4.6,3.4), 0xA98BFF, .85);
+  { const m = reg(tpcBox, new THREE.MeshBasicMaterial({color:0x9a9a9a, side:THREE.DoubleSide}), .16); const pl = new THREE.Mesh(new THREE.PlaneGeometry(3.4,4.6), m); pl.rotation.y = Math.PI/2; pl.position.x = -4; tpcBox.add(pl); }
+  { const v = []; for (let k=0;k<=16;k++){ const z = -1.7 + k*3.4/16; v.push(4,-2.3,z, 4,2.3,z); } for (let k=0;k<=10;k++){ const y = -2.3 + k*4.6/10; v.push(4,y,-1.7, 4,y,1.7); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(v,3)); tpcBox.add(new THREE.LineSegments(g, reg(tpcBox, new THREE.LineBasicMaterial({color:0x5FA8FF}), .55))); }
+  const TA = new THREE.Vector3(-2.4,-1.9,.8), TB = new THREE.Vector3(1.7,1.9,-.6);
+  tube(tpcBox, TA, TB, .045, 0xE8C27A, 1);
+  const flash = glow(tpcBox, 0xC9B8FF, 4.5, .9); flash.position.copy(TA.clone().lerp(TB,.5));
+  const EN = 90, ePos = new Float32Array(EN*3), eData = [];
+  const eGeo = new THREE.BufferGeometry(); eGeo.setAttribute('position', new THREE.BufferAttribute(ePos,3));
+  tpcBox.add(new THREE.Points(eGeo, reg(tpcBox, new THREE.PointsMaterial({color:0xC9B8FF, size:.11, blending:ADD}), 1)));
+  function spawnE(i, spread){ const s = Math.random(); const p = TA.clone().lerp(TB, s); eData[i] = {x: spread ? p.x + Math.random()*(3.95-p.x) : p.x, y:p.y, z:p.z, v:.9 + Math.random()*.4}; }
+  for (let i=0;i<EN;i++) spawnE(i, true);
+
+  /* ---- cavern ---- */
+  const cav = grp('cav');
+  const floorMat = reg(cav, new THREE.ShaderMaterial({
+    uniforms:{uAlpha:{value:1}},
+    vertexShader:`varying vec3 vW; void main(){ vec4 w = modelMatrix*vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }`,
+    fragmentShader: NOISE + `uniform float uAlpha; varying vec3 vW;
+      void main(){ vec2 p = vW.xz; float d = length(p);
+        vec3 gold = vec3(.91,.76,.48);
+        vec3 col = gold*.42*exp(-d*d/30.0) + gold*.05*exp(-d*d/400.0);
+        vec2 f = abs(fract(p/2.6) - .5);
+        float grid = (1.0 - smoothstep(.0,.02, min(f.x,f.y))) * exp(-d*d/180.0);
+        col += vec3(grid*.10);
+        col *= .75 + .5*fbm(vec3(p*1.4, 0.0));
+        gl_FragColor = vec4(col, uAlpha); }`
+  }), 1);
+  floorMat.depthWrite = true; floorMat.transparent = true;
+  { const fl = new THREE.Mesh(new THREE.PlaneGeometry(90,90), floorMat); fl.rotation.x = -Math.PI/2; fl.position.y = -2.2; cav.add(fl); }
+  const coneMat = reg(cav, new THREE.ShaderMaterial({
+    uniforms:{uAlpha:{value:1}},
+    vertexShader:`varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main(){ vUv = uv; vec4 mv = modelViewMatrix*vec4(position,1.0); vN = normalize(normalMatrix*normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }`,
+    fragmentShader:`uniform float uAlpha; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main(){ float a = .1 + .6*pow(vUv.y, 1.6); float e = pow(abs(dot(vN, vV)), 1.4); gl_FragColor = vec4(vec3(.95,.8,.52)*a*e, 1.0)*uAlpha; }`,
+    side:THREE.DoubleSide, blending:ADD
+  }), .9);
+  { const cone = new THREE.Mesh(new THREE.ConeGeometry(4.6, 9.8, 72, 1, true), coneMat); cone.position.y = -2.2 + 4.9; cav.add(cone); }
+  const apex = glow(cav, 0xF3D9A4, 5, .8); apex.position.set(0, 7.4, 0);
+  const floorGlow = glow(cav, 0xE8C27A, 10, .35); floorGlow.position.set(0,-2.1,.5);
+  // side cryostat blocks
+  for (const side of [-1,1]) for (let k=0;k<4;k++){
+    const geo = new THREE.BoxGeometry(3.2, 6.2, 2.6);
+    const m = reg(cav, new THREE.MeshBasicMaterial({color:0x080705}), 1); m.depthWrite = true;
+    const b = new THREE.Mesh(geo, m); b.position.set(side*(7.2 + k*.2), .9, 2 - k*4.2); cav.add(b);
+    const e = edges(cav, geo, 0xE8C27A, .16); e.position.copy(b.position);
+    const vents = new THREE.Group(); vents.position.copy(b.position);
+    for (let r=0;r<9;r++){ const vm = reg(cav, new THREE.MeshBasicMaterial({color:0xE8C27A, blending:ADD}), .09 + Math.random()*.08); const v = new THREE.Mesh(new THREE.PlaneGeometry(.8, .05), vm); v.position.set(-side*1.61, -2 + r*.45, .6); v.rotation.y = -side*Math.PI/2; vents.add(v); }
+    cav.add(vents);
+  }
+  // dust
+  const DN = 900, dPos = new Float32Array(DN*3);
+  for (let i=0;i<DN;i++){ dPos[i*3] = -11 + Math.random()*22; dPos[i*3+1] = -2 + Math.random()*10; dPos[i*3+2] = -12 + Math.random()*18; }
+  const dGeo = new THREE.BufferGeometry(); dGeo.setAttribute('position', new THREE.BufferAttribute(dPos,3));
+  cav.add(new THREE.Points(dGeo, reg(cav, new THREE.PointsMaterial({color:0xF3D9A4, size:.05, blending:ADD}), .8)));
+
+  // monolith detector (section 7)
+  const mono = grp('mono');
+  { const geo = new THREE.BoxGeometry(1.5, 3.4, 1.1); const m = reg(mono, new THREE.MeshBasicMaterial({color:0x0c0a07}), 1); m.depthWrite = true;
+    const b = new THREE.Mesh(geo, m); b.position.set(0,-.5,0); mono.add(b);
+    const e = edges(mono, geo, 0xE8C27A, .75); e.position.copy(b.position);
+    for (let r=0;r<10;r++){ const vm = reg(mono, new THREE.MeshBasicMaterial({color:0xE8C27A, blending:ADD}), .3); const v = new THREE.Mesh(new THREE.PlaneGeometry(1.1,.06), vm); v.position.set(0, -1.9 + r*.21, .56); mono.add(v); }
+    const top = reg(mono, new THREE.MeshBasicMaterial({color:0xF3D9A4, blending:ADD}), .5); const tp = new THREE.Mesh(new THREE.PlaneGeometry(1.0,.3), top); tp.position.set(0,.9,.56); mono.add(tp); }
+  // muons
+  const muons = grp('muons');
+  const MN = 46, mPos = new Float32Array(MN*6), mCol = new Float32Array(MN*6), mData = [];
+  const mGeo = new THREE.BufferGeometry(); mGeo.setAttribute('position', new THREE.BufferAttribute(mPos,3)); mGeo.setAttribute('color', new THREE.BufferAttribute(mCol,3));
+  muons.add(new THREE.LineSegments(mGeo, reg(muons, new THREE.LineBasicMaterial({vertexColors:true, blending:ADD}), 1)));
+  function spawnMu(i){ const depth = Math.min(1, -Math.log(1-Math.random())*.17); mData[i] = {x:-7 + Math.random()*14, z:-6 + Math.random()*8, y: 9 + Math.random()*8, stop: 8.5 - depth*9.6, v: 8 + Math.random()*5, life: 1}; }
+  for (let i=0;i<MN;i++) spawnMu(i);
+
+  // fiducial module (section 8)
+  const modl = grp('modl');
+  const modInner = new THREE.Group(); modInner.userData.mats = modl.userData.mats; modInner.position.set(0,1.6,0); modl.add(modInner);
+  edges(modInner, new THREE.BoxGeometry(5.6,2.8,2.8), 0xE8C27A, .95);
+  edges(modInner, new THREE.BoxGeometry(4.2,1.9,1.9), 0x5FA8FF, .95, true);
+  { const m = reg(modInner, new THREE.MeshBasicMaterial({color:0xE8C27A, blending:ADD}), .05); modInner.add(new THREE.Mesh(new THREE.BoxGeometry(5.6,2.8,2.8), m)); }
+  { const m = reg(modInner, new THREE.MeshBasicMaterial({color:0x5FA8FF, blending:ADD}), .07); modInner.add(new THREE.Mesh(new THREE.BoxGeometry(4.2,1.9,1.9), m)); }
+
+  /* ---- CP curves ---- */
+  const cp = grp('cp');
+  const CN = 400;
+  function mkCurve(color, base){ const pos = new Float32Array(CN*3); const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos,3)); const l = new THREE.Line(g, reg(cp, new THREE.LineBasicMaterial({color, blending:ADD}), base)); cp.add(l); const l2 = new THREE.Line(g, reg(cp, new THREE.LineBasicMaterial({color, blending:ADD}), base*.5)); l2.position.y = .025; cp.add(l2); return pos; }
+  const cpNu = mkCurve(0x5FA8FF, 1), cpBar = mkCurve(0xE8C27A, 1);
+  { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([-9,-2,0, 9,-2,0, -9,-2,0, -9,3.2,0],3)); cp.add(new THREE.LineSegments(g, reg(cp, new THREE.LineBasicMaterial({color:0xffffff}), .35))); }
+  const cpGlowA = glow(cp, 0x5FA8FF, 1.1, .9), cpGlowB = glow(cp, 0xE8C27A, 1.1, .9);
+  let cpM = 1, cpC = 1;
+  function cpP(E, sign){
+    const x = 1.27*DM2*1300/E, base = .065*Math.pow(Math.sin(x),2);
+    const matter = 1 + sign*cpM*.28*Math.min(1.4, E/2.6);
+    const cpf = 1 + sign*cpC*.35*Math.pow(Math.sin(x),2)*(1.2 - .25*E/2.6);
+    return Math.max(0, base*matter*cpf);
+  }
+  const cpX = E => -9 + (E-.5)/5.5*18, cpY = P => -2 + P/.12*5;
+
+  /* ---- rings vs tracks ---- */
+  const rings = grp('rings');
+  { const pos = []; for (let x=-7;x<=-.6;x+=.3) for (let y=-2.6;y<=2.6;y+=.3) pos.push(x,y,-.8);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+    rings.add(new THREE.Points(g, reg(rings, new THREE.PointsMaterial({color:0x8a8a8a, size:.06}), .7))); }
+  { const r1 = new THREE.Mesh(new THREE.TorusGeometry(1.15,.04,10,120), reg(rings, new THREE.MeshBasicMaterial({color:0x5FA8FF, blending:ADD}), 1)); r1.position.set(-5,.5,0); rings.add(r1);
+    const r2 = new THREE.Mesh(new THREE.TorusGeometry(1.1,.26,16,120), reg(rings, new THREE.MeshBasicMaterial({color:0xE8C27A, blending:ADD}), .22)); r2.position.set(-2.4,-.5,0); rings.add(r2);
+    const r3 = new THREE.Mesh(new THREE.TorusGeometry(1.1,.035,10,120), reg(rings, new THREE.MeshBasicMaterial({color:0xE8C27A, blending:ADD}), .9)); r3.position.set(-2.4,-.5,0); rings.add(r3); }
+  edges(rings, new THREE.BoxGeometry(6.0, 4.6, 2), 0xA98BFF, .4).position.set(3.7,0,-.2);
+  { const V = new THREE.Vector3(1.6,-.6,0);
+    tube(rings, V, new THREE.Vector3(6.3,1.9,0), .035, 0x5FA8FF, 1);
+    tube(rings, V, new THREE.Vector3(2.1,-2.1,0), .1, 0xffffff, .9, THREE.NormalBlending);
+    const sh = [[4.4,-1.6],[3.5,-2.3],[5.2,-.7],[4.9,-2.4],[3.0,-1.5]];
+    let prev = V; sh.forEach((q,i) => { const P = new THREE.Vector3(q[0], q[1], 0); tube(rings, i < 2 ? V : new THREE.Vector3(3.2,-1.15,0), P, .022, 0xE8C27A, .95); });
+    tube(rings, V, new THREE.Vector3(3.2,-1.15,0), .03, 0xE8C27A, 1);
+    const vg = glow(rings, 0xffffff, .8, 1); vg.position.copy(V); }
+
+  /* ---- lights + NASA satellite models ---- */
+  scene.add(new THREE.AmbientLight(0x8899bb, .55));
+  const sunL = new THREE.DirectionalLight(0xfff4e6, 2.6); sunL.position.set(-6, 5, 7); scene.add(sunL);
+  const rimL = new THREE.DirectionalLight(0x5FA8FF, 1.2); rimL.position.set(6, -2, -6); scene.add(rimL);
+  const satA = grp('satA'), satB = grp('satB');
+  const pivA = new THREE.Group(), pivB = new THREE.Group(); satA.add(pivA); satB.add(pivB);
+  function loadSat(url, pivot, g, size){
+    if (!THREE.GLTFLoader) return;
+    fetch(url).then(r => r.text()).then(b64 => {
+      const bin = atob(b64.trim()), buf = new Uint8Array(bin.length);
+      for (let i=0;i<bin.length;i++) buf[i] = bin.charCodeAt(i);
+      new THREE.GLTFLoader().parse(buf.buffer, '', onModel, () => {});
+    }).catch(() => {});
+    function onModel(gl){
+      const m = gl.scene;
+      const box = new THREE.Box3().setFromObject(m), c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+      const k = size / Math.max(sz.x, sz.y, sz.z);
+      m.scale.setScalar(k); m.position.copy(c).multiplyScalar(-k);
+      m.traverse(o => { if (o.isMesh) { const ms = Array.isArray(o.material) ? o.material : [o.material]; ms.forEach(mt => { if (mt.metalness !== undefined) { mt.metalness = Math.min(mt.metalness, .55); mt.roughness = Math.max(mt.roughness, .35); } reg(g, mt, 1); mt.depthWrite = true; }); } });
+      pivot.add(m);
+    }
+  }
+  loadSat('assets/acrimsat.glb.txt', pivA, satA, 2.5);
+  loadSat('assets/aim.glb.txt', pivB, satB, 2.6);
+  satA.position.set(3.9, .15, 1.6);
+  satB.position.set(-1.4, 1.2, 5.2);
+  // whole-Earth photograph (NASA Blue Marble) for the scale scene
+  const disc = grp('disc');
+  { const m = reg(disc, new THREE.ShaderMaterial({
+      uniforms:{uAlpha:{value:1}, tex:{value: TL.load('assets/earth_disc.jpg')}},
+      vertexShader:`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+      fragmentShader:`uniform float uAlpha; uniform sampler2D tex; varying vec2 vUv; void main(){ float d = distance(vUv, vec2(.5)); float m = 1.0 - smoothstep(.405, .414, d); gl_FragColor = vec4(texture2D(tex, vUv).rgb, m*uAlpha); }`
+    }), 1);
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(9.6,9.6), m); pl.position.set(5.9, .2, -2.5); disc.add(pl);
+    const halo = glow(disc, 0x5FA8FF, 10.2, .4); halo.position.set(5.9,.2,-2.6); }
+
+  /* ---- camera keys (one per section) ---- */
+  const K = [
+    [[0,.3,12],[0,0,0]],        //0 hero
+    [[-1.6,1.5,11.2],[3,-1.2,0]],//1 hook
+    [[1.5,.4,12.5],[1.5,-.5,0]], //2 leptons
+    [[0,1.4,15],[1,-1,0]],      //3 map
+    [[0,1.4,15],[1,-1,0]],      //4 pip-ii
+    [[0,1.4,15],[1,-1,0]],      //5 beamline
+    [[0,0,13],[0,-.2,-2]],      //6 wave
+    [[0,0,12.5],[0,0,0]],       //7 feynman
+    [[0,.1,16.8],[0,.1,0]],     //8 tpc
+    [[0,.1,16.8],[0,.1,0]],     //9 protodune
+    [[0,.4,13.5],[0,1.7,0]],    //10 cavern
+    [[0,2.1,10.5],[0,1.6,0]],   //11 goals
+    [[0,.9,17],[0,1.7,0]],      //12 far site
+    [[0,.9,17],[0,1.7,0]],      //13 timeline
+    [[0,.9,17],[0,1.7,0]],      //14 near
+    [[0,.6,12.5],[0,.6,0]],     //15 nd-lar
+    [[0,.6,12.5],[0,.6,0]],     //16 cp
+    [[0,.6,12.5],[0,.6,0]],     //17 results
+    [[0,0,14.8],[0,0,0]],       //18 rings
+    [[0,0,12],[0,0,0]],         //19 why
+    [[0,0,12],[0,0,0]],         //20 collab
+    [[0,0,12],[0,0,0]],         //21 refs
+    [[0,0,12],[0,0,0]]          //22 close
+  ];
+  const sm = t => t*t*(3-2*t);
+  const camPos = new THREE.Vector3(), camTgt = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3();
+  const mouse = {x:0, y:0, tx:0, ty:0};
+  addEventListener('pointermove', e => { mouse.tx = (e.clientX/innerWidth - .5); mouse.ty = (e.clientY/innerHeight - .5); });
+  function W(p, lo, hi, f){ f = f || .55; if (p >= lo && p <= hi) return 1; const d = p < lo ? lo - p : p - hi; return sm(Math.max(0, 1 - d/f)); }
+
+  let tPrev = 0;
+  function render(t, p){
+    const dt = Math.min(.05, t - tPrev || .016); tPrev = t;
+    const i0 = Math.floor(p), i1 = Math.min(K.length-1, i0+1), f = sm(p - i0);
+    a.fromArray(K[i0][0]); b.fromArray(K[i1][0]); camPos.copy(a).lerp(b, f);
+    a.fromArray(K[i0][1]); b.fromArray(K[i1][1]); camTgt.copy(a).lerp(b, f);
+    mouse.x += (mouse.tx - mouse.x)*.04; mouse.y += (mouse.ty - mouse.y)*.04;
+    const drift = reduce ? 0 : 1;
+    camera.position.set(camPos.x + mouse.x*.8*drift + Math.sin(t*.13)*.15*drift, camPos.y - mouse.y*.5*drift + Math.sin(t*.17)*.1*drift, camPos.z);
+    camera.lookAt(camTgt);
+
+    const wEarth = W(p,0,5);
+    setW(stars, p > 21.5 ? .35 + .65*Math.max(0, 22-p)*2 : 1);
+    setW(earth, wEarth);
+    setW(streaks, Math.max(W(p,.5,3)*.95, W(p,5,5)*.6));
+    setW(satA, W(p,1,1,.6)); setW(satB, W(p,2,2,.6)); setW(disc, W(p,19,19,.6));
+    setW(cons, W(p,1,1.2,.45));
+    setW(wave, W(p,6,6,.6));
+    setW(tpc, W(p,7,8) * (p < 8 ? .3 + .7*Math.max(0, p-7) : 1));
+    setW(cav, W(p,11,14) * (p > 11.6 ? Math.max(.4, 1 - (p-11.6)*1.4) : 1));
+    setW(mono, 0);
+    setW(muons, 0);
+    setW(modl, W(p,11,11,.6));
+    setW(cp, W(p,16,16,.6));
+    setW(rings, W(p,18,18,.6));
+
+    const speed = reduce ? 0 : 1;
+    earthMesh.rotation.y = -.12 + t*.0025*speed; clouds.rotation.y = -.12 + t*.0034*speed;
+    stars.rotation.y = t*.003*speed;
+
+    if (streaks.visible){
+      for (let i=0;i<SN;i++){
+        const s = sData[i];
+        s.x += DIR.x*s.v*dt*speed; s.y += DIR.y*s.v*dt*speed; s.z += DIR.z*s.v*dt*speed;
+        if (s.x > 26) spawnStreak(i, false);
+        const hx = s.x, hy = s.y, hz = s.z, tx = hx - DIR.x*s.len, ty = hy - DIR.y*s.len, tz = hz - DIR.z*s.len;
+        sPos.set([tx,ty,tz,hx,hy,hz], i*6);
+        const c = s.gold ? [.91,.76,.48] : [.37,.66,1];
+        sCol.set([0,0,0, c[0],c[1],c[2]], i*6);
+      }
+      sGeo.attributes.position.needsUpdate = true; sGeo.attributes.color.needsUpdate = true;
+    }
+    if (wave.visible){
+      for (let i=0;i<WN;i++){
+        const x = -11 + 22*i/(WN-1); const [y, P] = waveY(x, Ebeam);
+        wPos[i*3] = x; wPos[i*3+1] = y; wPos[i*3+2] = -2;
+        tmpC.copy(BLUE).lerp(GOLD, P); wCol[i*3] = tmpC.r; wCol[i*3+1] = tmpC.g; wCol[i*3+2] = tmpC.b;
+      }
+      wGeo.attributes.position.needsUpdate = true; wGeo.attributes.color.needsUpdate = true;
+      packets.forEach((g,k) => { const x = -11 + ((t*3.2*speed + k*22/3) % 22); const [y,P] = waveY(x, Ebeam); g.position.set(x, y, -1.98); g.material.color.copy(BLUE).lerp(GOLD, P); });
+      const [fy] = waveY(0, Ebeam); farGlow.position.set(0, fy, -1.97);
+    }
+    if (tpc.visible){
+      tpcBox.rotation.y = -.28 + Math.sin(t*.25)*.06*speed; tpcBox.rotation.x = .12;
+      for (let i=0;i<EN;i++){ const e = eData[i]; e.x += e.v*dt*speed; if (e.x >= 3.95) spawnE(i, false); ePos[i*3] = e.x; ePos[i*3+1] = e.y; ePos[i*3+2] = e.z; }
+      eGeo.attributes.position.needsUpdate = true;
+      const ph = (t % 2.6)/2.6; flash.material.opacity = flash.material.userData.base * (tpc.userData.w || 0) * (ph < .08 ? 1 : Math.max(.12, 1 - (ph-.08)*3));
+    }
+    if (cav.visible){
+      for (let i=0;i<DN;i++){ dPos[i*3+1] += dt*.12*speed; if (dPos[i*3+1] > 8) dPos[i*3+1] = -2; dPos[i*3] += Math.sin(t*.3 + i)*.002*speed; }
+      dGeo.attributes.position.needsUpdate = true;
+    }
+    if (muons.visible){
+      for (let i=0;i<MN;i++){
+        const m = mData[i];
+        if (m.y > m.stop) m.y -= m.v*dt*speed; else { m.life -= dt*1.4; if (m.life <= 0) spawnMu(i); }
+        const y = Math.max(m.y, m.stop), L = 1.6, k = Math.max(0, m.life);
+        mPos.set([m.x, y+L, m.z, m.x, y, m.z], i*6);
+        mCol.set([0,0,0, .85*k, .85*k, .85*k], i*6);
+      }
+      mGeo.attributes.position.needsUpdate = true; mGeo.attributes.color.needsUpdate = true;
+    }
+    if (modl.visible){ modInner.rotation.y = .5 + t*.18*speed; modInner.rotation.x = .18; }
+    if (cp.visible){
+      const tm = cpMode >= 1 ? 1 : 0, tc = cpMode === 2 ? 1 : 0;
+      cpM += (tm - cpM)*.06; cpC += (tc - cpC)*.06;
+      for (let i=0;i<CN;i++){ const E = .5 + 5.5*i/(CN-1);
+        cpNu[i*3] = cpX(E); cpNu[i*3+1] = cpY(cpP(E, 1)); cpNu[i*3+2] = 0;
+        cpBar[i*3] = cpX(E); cpBar[i*3+1] = cpY(cpP(E,-1)); cpBar[i*3+2] = 0; }
+      cp.children.forEach(c => { if (c.isLine && c.geometry.attributes.position) c.geometry.attributes.position.needsUpdate = true; });
+      const E1 = .5 + ((t*.8*speed) % 5.5);
+      cpGlowA.position.set(cpX(E1), cpY(cpP(E1,1)), .01); cpGlowB.position.set(cpX(E1), cpY(cpP(E1,-1)), .01);
+    }
+    if (satA.visible){ pivA.rotation.set(.35 + Math.sin(t*.15)*.1, t*.12*speed, -.25); satA.position.y = .15 + Math.sin(t*.4)*.06; }
+    if (satB.visible){ pivB.rotation.set(.2, -t*.1*speed, .3); }
+    if (rings.visible){ rings.rotation.y = Math.sin(t*.2)*.08*speed; }
+    renderer.render(scene, camera);
+  }
+  return { render };
+}
+})();
+</script>
+
+</body>
+</html>
